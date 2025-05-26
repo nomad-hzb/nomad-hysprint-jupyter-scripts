@@ -1,0 +1,6 @@
+
+        numpy>=1.19.0
+        matplotlib>=3.3.0
+        ipywidgets>=7.6.0
+        voila>=0.2.0
+        jupyter>=1.0.0

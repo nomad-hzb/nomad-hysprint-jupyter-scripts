@@ -1,0 +1,40 @@
+Date	12:11:59 - 23.04.2024
+Location	HYDIRIS05
+Sample	EC7
+User	
+Folder	C:/Data/Ecehan_Cevik/20240422/
+Voltage_start (V)	-0.2
+Voltage_end (V)	1.2
+Voltage_step (V)	0.02
+Averaged Points	3
+Integration time(s)	0.1
+Setting time (s)	0.1
+Current limit (mA)	100
+Cell area(cm²)	[0.16, 0.16, 0.16, 0.16, 0.16, 0.16]
+Light soaking (s)	0
+Soaking bias (V)	0
+Power Density (mW/cm²)	100
+Material	
+Additives	
+Concentration	
+Solvents	
+Solvents Ratio	
+Substrate	
+Temperature ('C)	
+Water content (ppm)	
+Oxygen content (ppm)	
+Ref. Current(mA)	0
+Sun%	0
+SuSi Intensity (%)	99.2
+Comments	
+--
+""
+--
+Voltage (V)_a_Forward_Light	Current Density(mA/cm²)_a_Forward_Light
+-0.20000000000000004	-65.69577083333333
+-0.18000000000000002	-59.244781249999996
+-0.16000000000000003	-52.79742708333333
+-0.14000000000000004	-46.350972916666656
+-0.12000000000000005	-39.90615833333333
+-0.10000000000000005	-33.46008125
+-0.08000000000000007	-27.016685416666665
