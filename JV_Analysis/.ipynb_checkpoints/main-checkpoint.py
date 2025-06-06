@@ -1013,6 +1013,176 @@ def boxplot_all_cells(path, wb, data, var_x, var_y, filtered_info, datatype):
     return fig, sample_name, wb
 
 
+def boxplot_paired_by_direction(path, wb, data, var_x, var_y, filtered_info, datatype):
+    """Create a paired boxplot with forward/backward direction using different colors"""
+    names_dict = {
+        "voc": 'Voc(V)', "jsc": 'Jsc(mA/cm2)', "ff": 'FF(%)', "pce": 'PCE(%)',
+        "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', "pmpp": 'P_mpp(mW/cm2)',
+        "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
+    }
+    var_name_y = names_dict[var_y]
+    trash, filters = filtered_info
+
+    try:
+        data["sample"] = data["sample"].astype(int)
+    except ValueError:
+        pass
+
+    data['Jsc(mA/cm2)'] = data['Jsc(mA/cm2)'].abs()
+
+    # Check if 'direction' column exists
+    if 'direction' not in data.columns:
+        print("Warning: 'direction' column not found in data. Creating dummy direction column.")
+        data['direction'] = 'forward'  # Default fallback
+
+    # Calculate statistics for each direction
+    descriptor = data.groupby([var_x, 'direction'])[var_name_y].describe()
+
+    # Ordering based on var_x categories
+    order_parameter = "alphabetic"
+    if order_parameter != "alphabetic":
+        orderc = data.groupby(var_x)[var_name_y].describe().sort_values(by=[order_parameter])["count"].index
+    else:
+        orderc = data.groupby(var_x)[var_name_y].describe().sort_index()["count"].index
+
+    # Create dictionaries to map categories and directions to their counts
+    data_counts = data.groupby([var_x, 'direction'])[var_name_y].count().to_dict()
+    trash_counts = trash.groupby([var_x, 'direction'])[var_name_y].count().to_dict() if not trash.empty and 'direction' in trash.columns else {}
+
+    # Create figure
+    fig = go.Figure()
+    
+    # Define colors for forward and backward directions
+    direction_colors = {
+        'forward': 'rgba(93, 164, 214, 0.7)',   # Blue for forward
+        'backward': 'rgba(255, 144, 14, 0.7)'   # Orange for backward
+    }
+    
+    # Get unique directions in the data
+    directions = data['direction'].unique()
+    
+    # Add boxplots for each category and direction combination
+    for category in orderc:
+        for direction in directions:
+            # Get data for this category and direction
+            category_direction_data = data[
+                (data[var_x] == category) & 
+                (data['direction'] == direction)
+            ][var_name_y].dropna()
+            
+            if not category_direction_data.empty:
+                # Get counts and statistics
+                data_count = data_counts.get((category, direction), 0)
+                trash_count = trash_counts.get((category, direction), 0)
+                median = category_direction_data.median()
+                mean = category_direction_data.mean()
+                
+                # Format category name with direction and count
+                if trash_count == 0:
+                    category_name = f"{category} ({direction}, n={data_count})"
+                else:
+                    category_name = f"{category} ({direction}, {data_count}/{data_count + trash_count})"
+                
+                # Add boxplot with direction-specific styling
+                fig.add_trace(go.Box(
+                    y=category_direction_data,
+                    name=category_name,
+                    legendgroup=direction,  # Group by direction for legend
+                    legendgrouptitle_text=direction.capitalize(),
+                    boxpoints='all',     # Show all points
+                    pointpos=0,          # Center points horizontally
+                    jitter=0.5,          # Add jitter to points
+                    whiskerwidth=0.4,    # Thicker whiskers
+                    marker=dict(
+                        size=5,          # Slightly larger points
+                        opacity=0.7,     # Semi-transparent
+                        color='rgba(0,0,0,0.7)'  # Points in dark gray
+                    ),
+                    line=dict(width=1.5),  # Slightly thicker lines
+                    fillcolor=direction_colors.get(direction, 'rgba(128, 128, 128, 0.7)'),
+                    boxmean=True,        # Show mean
+                    hoverinfo='all',
+                    hovertemplate=(
+                        f"<b>{category} ({direction})</b><br>" +
+                        "Value: %{y:.3f}<br>" +
+                        f"Median: {median:.3f}<br>" +
+                        f"Mean: {mean:.3f}<br>" +
+                        f"Count: {data_count}"
+                    ),
+                    # Add notches for visual appeal
+                    notched=False,
+                    notchwidth=0.5,
+                    # Group boxes by category for proper pairing
+                    offsetgroup=category,
+                    x=[f"{category}"] * len(category_direction_data)  # Ensure proper x-axis positioning
+                ))
+    
+    # Create a title with data information
+    title_text = f"Paired Boxplot of {var_y} by {var_x} (Forward vs Backward)" + (" (filtered out)" if datatype == "junk" else "")
+    subtitle = f"Data from {len(data)} ({trash.shape[0]} removed) measurements across {data[var_x].nunique()} {var_x} categories"
+    
+    # Update layout for paired boxplots
+    fig.update_layout(
+        title={
+            'text': f"{title_text}<br><sup>{subtitle}</sup>",
+            'y': 0.95,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=18)
+        },
+        xaxis_title=var_x,
+        yaxis_title=var_name_y,
+        # Settings for paired boxplots
+        boxmode='group',         # Group boxes by category
+        boxgap=0.1,             # Gap between boxes within a group
+        boxgroupgap=0.2,        # Gap between groups
+        template="plotly_white",
+        margin=dict(l=40, r=40, t=100, b=80),
+        showlegend=True,        # Show legend for directions
+        legend=dict(
+            orientation="h",     # Horizontal legend
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        plot_bgcolor='rgb(243, 243, 243)',  # Light gray background
+        paper_bgcolor='rgb(243, 243, 243)',
+    )
+    
+    # Force the box width
+    fig.update_traces(
+        width=0.4,              # Narrower boxes to accommodate pairs
+        quartilemethod="linear"  # Use linear method for quartiles
+    )
+    
+    # Rotate x-axis labels if many categories
+    if len(orderc) > 4:
+        fig.update_layout(
+            plot_bgcolor='white',    # Sets the plot area background to white
+            paper_bgcolor='white',    # Sets the entire figure background to white
+            xaxis=dict(
+                tickangle=-10,
+                tickfont=dict(size=10)
+            )
+        )
+    
+    # Save to Excel (using the same function as original)
+    wb = save_combined_excel_data(path, wb, data, filtered_info, var_x, var_name_y, var_y, descriptor)
+
+    if datatype == "junk":
+        sample_name = f"boxplot_paired_j_{var_y}_by_{var_x}.html"
+    else:
+        sample_name = f"boxplot_paired_{var_y}_by_{var_x}.html"
+
+    if not is_running_in_jupyter():
+        fig.write_html(f"{path}{sample_name}")
+        print(f"Saved paired boxplot of {var_y} by {var_x} (Forward vs Backward)")
+
+    return fig, sample_name, wb
+
+
 def save_full_data_frame(path, data):
     file_path = path + "0_numerical_results.xlsx"
 

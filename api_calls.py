@@ -244,6 +244,25 @@ def get_specific_data_of_sample(url, token, sample_id, entry_type, with_meta=Fal
 
 def get_all_JV(url, token, sample_ids, jv_type="HySprint_JVmeasurement"):
     # collect the results of the sample, in this case it are all the annealing temperatures
+    def process_jv_with_metadata(jv_data_with_metadata):
+        """
+        Process JV data including metadata for status extraction
+        Add this to your data processing pipeline
+        """
+        processed_data = []
+        
+        for sample_id, measurements in jv_data_with_metadata.items():
+            for data, metadata in measurements:
+                # Extract status from metadata
+                status = extract_status_from_metadata(data, metadata)
+                
+                # Add status to the data
+                data['status'] = status
+                
+                processed_data.append(data)
+        
+        return processed_data
+    
     query = {
         'required': {
             'metadata': '*'
@@ -278,50 +297,6 @@ def get_all_JV(url, token, sample_ids, jv_type="HySprint_JVmeasurement"):
     linked_data = response.json()["data"]
     res = {}
     for ldata in linked_data:
-        lab_id = ldata["archive"]["data"]["samples"][0]["lab_id"]
-        if lab_id not in res:
-            res[lab_id] = []
-        res[lab_id].append((ldata["archive"]["data"],ldata["archive"]["metadata"]))
-    return res
-
-def get_all_measurements_except_JV(url, token, sample_ids):
-    # collect the results of the sample, in this case it are all the annealing temperatures
-    query = {
-        'required': {
-            'metadata': '*'
-        },
-        'owner': 'visible',
-        'query': {'results.eln.lab_ids:any': sample_ids},
-        'pagination': {
-            'page_size': 10000
-        }
-    }
-    response = requests.post(
-        f'{url}/entries/query', headers={'Authorization': f'Bearer {token}'}, json=query)
-    response.raise_for_status()
-    
-    entry_ids = [entry["entry_id"] for entry in response.json()["data"]]
-    
-    query = {
-        'required': {
-            'data': '*',
-            'metadata': '*',
-        },
-        'owner': 'visible',
-        'query': {'entry_references.target_entry_id:any': entry_ids,
-                 'section_defs.definition_qualified_name': 'baseclasses.BaseMeasurement'},
-        'pagination': {
-            'page_size': 10000
-        }
-    }
-    response = requests.post(f'{url}/entries/archive/query',
-                             headers={'Authorization': f'Bearer {token}'}, json=query)
-    response.raise_for_status()
-    linked_data = response.json()["data"]
-    res = {}
-    for ldata in linked_data:
-        if "entry_type" not in ldata["archive"]["metadata"] or "JV" in ldata["archive"]["metadata"]["entry_type"]:
-            continue
         lab_id = ldata["archive"]["data"]["samples"][0]["lab_id"]
         if lab_id not in res:
             res[lab_id] = []
