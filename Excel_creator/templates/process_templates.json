@@ -13,23 +13,9 @@
 			{"process": "Experiment Info"}
 		]
 	},
-    "osails_bypass": {
-      "name": "Osail's Bypass",
-      "description": "Osail's bypass process with PEDOT-PSS and triple evaporation",
-      "category": "Bypass Processes",
-      "researcher": "Osail",
-      "process_sequence": [
-        {"process": "Experiment Info"},
-        {"process": "Cleaning O2-Plasma", "config": {"solvents": 4}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "antisolvent": false}},
-        {"process": "Evaporation"},
-        {"process": "Evaporation"},
-        {"process": "Evaporation"}
-      ]
-    },
-    "annes_bypass": {
-      "name": "Anne's Bypass",
-      "description": "Anne's bypass process with UV-Ozone cleaning and perovskite layer",
+    "bypass_diodes": {
+      "name": "Bypass diodes",
+      "description": "Bypass process with UV-Ozone cleaning and perovskite layer",
       "category": "Bypass Processes",
       "researcher": "Anne",
       "process_sequence": [
@@ -42,8 +28,8 @@
         {"process": "Evaporation"}
       ]
     },
-    "printer_process": {
-      "name": "Printer Process",
+    "inkjet_printing": {
+      "name": "Inkjet Printing",
       "description": "Inkjet printing process with perovskite layer",
       "category": "Printing Processes",
       "process_sequence": [
@@ -56,9 +42,9 @@
         {"process": "Evaporation"}
       ]
     },
-    "eike_process": {
-      "name": "Eike Process",
-      "description": "Eike's complex multi-layer process with washing and interlayer steps",
+    "multi_spin-coating_process": {
+      "name": "Multiple Spin-Coated Layers",
+      "description": "complex multi-layer process with washing and interlayer steps",
       "category": "Advanced Processes",
       "researcher": "Eike",
       "process_sequence": [
@@ -75,9 +61,9 @@
         {"process": "Evaporation"}
       ]
     },
-    "kevin_prince": {
-      "name": "Kevin Prince",
-      "description": "Kevin Prince's comprehensive all-inorganic perovskite tandem process",
+    "triple_tandem": {
+      "name": "Triple Tandem Sells",
+      "description": "Comprehensive all-inorganic perovskite tandem process",
       "category": "Tandem Processes",
       "researcher": "Kevin Prince",
       "process_sequence": [
@@ -106,9 +92,9 @@
         {"process": "Evaporation"}
       ]
     },
-    "daniel_spinbot": {
-      "name": "Daniel Spinbot",
-      "description": "Daniel's Spinbot process with passivation layers",
+    "spinbot_process": {
+      "name": "Spinbot process",
+      "description": "Spinbot process with passivation layers",
       "category": "Spinbot Processes",
       "researcher": "Daniel",
       "process_sequence": [
@@ -137,22 +123,6 @@
         {"process": "Evaporation"},
         {"process": "Evaporation"},
         {"process": "Evaporation"},
-        {"process": "Evaporation"}
-      ]
-    },
-    "philippe_process": {
-      "name": "Philippe Process",
-      "description": "Philippe's FTO-based process with NiOx and PCBM layers",
-      "category": "FTO Processes",
-      "researcher": "Philippe",
-      "process_sequence": [
-        {"process": "Experiment Info"},
-        {"process": "Cleaning UV-Ozone", "config": {"solvents": 4}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "antisolvent": false}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "antisolvent": false}},
-        {"process": "Spin Coating", "config": {"solvents": 2, "solutes": 4, "spinsteps": 2, "antisolvent": true}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "antisolvent": false}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "antisolvent": false}},
         {"process": "Evaporation"}
       ]
     },
@@ -190,19 +160,8 @@
         {"process": "Evaporation"}
       ]
     },
-    "test_process": {
-      "name": "Test Process",
-      "description": "Simple test process with gas quenching",
-      "category": "Test Processes",
-      "process_sequence": [
-        {"process": "Experiment Info"},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1}},
-        {"process": "Spin Coating", "config": {"solvents": 2, "solutes": 5, "spinsteps": 2, "antisolvent": true}},
-        {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "gasquenching": true}}
-      ]
-    },
-    "all_inclusive_test": {
-      "name": "All Inclusive Test",
+    "all_processes_test": {
+      "name": "All processes (Test)",
       "description": "Comprehensive test template with all available processes",
       "category": "Test Processes",
       "process_sequence": [
