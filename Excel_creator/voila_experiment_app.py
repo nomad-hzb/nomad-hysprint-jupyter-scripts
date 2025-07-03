@@ -392,21 +392,6 @@ class MinimalistExperimentBuilder:
             )
             numeric_controls.append(materials_widget)
         
-        # Precursors (for Ink Recycling)
-        if process_name == 'Ink Recycling':
-            precursors_widget = widgets.BoundedIntText(
-                value=config.get('precursors', 0),
-                min=0, max=10,
-                description='Precursors:',
-                style={'description_width': '70px'},
-                layout=widgets.Layout(width='135px')
-            )
-            precursors_widget.observe(
-                lambda change, idx=index: self._update_config(idx, 'precursors', change['new']), 
-                names='value'
-            )
-            numeric_controls.append(precursors_widget)
-        
         # Checkboxes for Spin Coating
         if process_name == 'Spin Coating':
             checkbox_options = [
@@ -517,7 +502,7 @@ class MinimalistExperimentBuilder:
             'Inkjet Printing': {'solvents': 1, 'solutes': 1, 'annealing': False, 'gavd': False},
             'Slot Die Coating': {'solvents': 1, 'solutes': 1},
             'Co-Evaporation': {'materials': 2},
-            'Ink Recycling': {'solvents': 1, 'solutes': 1, 'precursors': 1},
+            'Ink Recycling': {'solvents': 1, 'solutes': 1},
             'Evaporation': {'carbon_paste': False}
         }
         return defaults.get(process_name, {})
