@@ -397,11 +397,6 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                     make_label(f'Solute {i} amount [g]', 5.0 * i),
                     make_label(f'Solute {i} moles [mol]', 0.02 * i),
                 ])
-            for i in range(1, config.get('precursors', 0) + 1):
-                steps.extend([
-                    make_label(f'Precursor {i} name', f'MAI {i}'),
-                    make_label(f'Precursor {i} moles [mol]', 0.01 * i),
-                ])
             
             # Mixing steps
             steps.extend([
