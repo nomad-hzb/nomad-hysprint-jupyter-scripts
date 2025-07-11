@@ -6,7 +6,7 @@ def get_token(url, name=None):
     try:
         return os.environ['NOMAD_CLIENT_ACCESS_TOKEN']
     except KeyError:
-        user = user = name if name is not None else input("Username")
+        user = name if name is not None else input("Username")
         print("Password:")
         password = getpass.getpass()
     
