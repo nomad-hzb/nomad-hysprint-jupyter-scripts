@@ -1,4 +1,4 @@
-﻿No.,CAS,Name,D,P,H,Mole_vol,ims_idx,bp,mw,viscosity(mPa.s@25),vis_temp,heat_of_vap,hov_temp,SMILES,alias,synonyms,Note,DN
+No.,CAS,Name,D,P,H,Mole_vol,ims_idx,bp,mw,viscosity,vis_temp,heat_of_vap,hov_temp,SMILES,alias,synonyms,Note,DN
 1,75-07-0,Acetaldehyde,14.7,12.5,7.9,56.6,,20.8,44.05,0.21,20,25.73,20.2,O=CC,,acetic aldehyde;ethyl aldehyde,,
 2,64-19-7,Acetic acid,14.5,8,13.5,57.1,139;190;39,117,60.05,1.06,25,23.7,117.9,CC(=O)O,,ethanoic acid;Ethylic acid;Vinegar acid,,20
 3,108-24-7,Acetic anhydride,16,11.7,10.2,94.5,40,139,102.09,0.84,25,38.2,139.5,CC(=O)OC(=O)C  ,,Acetyl acetate;Acetanhydride;Ethanoic anhydride,,10.5
@@ -254,5 +254,6 @@
 253,9004-64-2,Hydroxypropyl Cellulose,15.052,3.331,12.105,,,,370000,,,,,[OCC@@H](O)CO[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O,,HPC,,
 254,554-12-1,Methylammonium propionate,18.97,4.83,9.1,,,79,88.11,,,,,CCC(=O)OC,,MAP,,
 255,96-47-9,2-Methyltetrahydrofuran,16.9,4.5,4.3,,,80,86.13,0.46,25,30.5,80,CC1CCCO1,,me-THF,,12
-256,109-86-4,2-Methoxyethanol,7.9,4.5,8.02,78.81,,124,76.09,1.413,,,,OCCOC,,methyl glycol; 2-methoxyethyl alcohol,,19.8
-257,872-50-4,N-Methyl-2-pyrrolidone,8.8,6,3.5,99.13,,202,99.13,1.89,,,,CN1CCCC1=O,,NMP,,27.3
+256,126-33-0,Sulfolane,18,17,6.6,,,,,,,,,,,"sulfolan, sulpholane, sulfalone, sulphoxaline, dioxothiolan",,
+257,1003-78-7,",4-dimethylsulfolane",18,12,10,,,,,,,,,,,methylsulfonylmethane ,,
+258,109-86-4,2-Methoxy ethanol,7.9,4.5,8,,,,,,,,,,,,,
