@@ -356,7 +356,7 @@ def get_all_eqe(url, token, sample_ids, eqe_type="HySprint_EQEmeasurement"):
         'owner': 'visible',
         'query': {'results.eln.lab_ids:any': sample_ids},
         'pagination': {
-            'page_size': 100
+            'page_size': 10000
         }
     }
     response = requests.post(
@@ -374,7 +374,7 @@ def get_all_eqe(url, token, sample_ids, eqe_type="HySprint_EQEmeasurement"):
         'query': {'entry_references.target_entry_id:any': entry_ids,
                  'entry_type':eqe_type},
         'pagination': {
-            'page_size': 100
+            'page_size': 10000
         }
     }
     response = requests.post(f'{url}/entries/archive/query',
