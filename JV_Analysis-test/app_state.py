@@ -1,3 +1,13 @@
+"""
+Application State Management Module
+Centralized state management for the JV Analysis Dashboard.
+Handles data storage, UI state, and state change notifications.
+"""
+
+__author__ = "Edgar Nandayapa"
+__institution__ = "Helmholtz-Zentrum Berlin"
+__created__ = "August 2025"
+
 class AppState:
     def __init__(self):
         # Data storage

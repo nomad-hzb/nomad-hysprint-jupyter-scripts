@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What's New - JV Analysis Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 30px;
+            background-color: #ffffff;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .version-info {
+            color: #6c757d;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+        
+        h2 {
+            color: #34495e;
+            font-size: 1.4em;
+            margin: 35px 0 15px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        h3 {
+            color: #495057;
+            font-size: 1.1em;
+            margin: 20px 0 10px 0;
+            font-weight: 600;
+        }
+        
+        .emoji {
+            font-size: 1.2em;
+            margin-right: 8px;
+        }
+        
+        ul {
+            margin: 0 0 20px 0;
+            padding-left: 0;
+            list-style: none;
+        }
+        
+        li {
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+            line-height: 1.5;
+        }
+        
+        li:before {
+            content: "•";
+            color: #007bff;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+        
+        .sub-section {
+            margin: 25px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .sub-section h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        
+        .sub-section ul {
+            margin-bottom: 0;
+        }
+        
+        .conclusion {
+            margin-top: 40px;
+            padding: 25px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+            font-style: italic;
+            color: #495057;
+            border: 1px solid #e9ecef;
+        }
+        
+        strong {
+            color: #2c3e50;
+        }
+        
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><span class="emoji">🎉</span>What's New in JV Analysis Dashboard</h1>
+        <div class="version-info">Released August 2025</div>
+    </div>
+
+    <h2><span class="emoji">📊</span>Enhanced Summary Statistics</h2>
+    <ul>
+        <li><strong>Completely redesigned</strong> summary statistics with comprehensive information about your selected batches</li>
+        <li>Detailed performance metrics including best/worst samples, distribution statistics, and performance by scan direction</li>
+        <li>Top performing samples table showing the highest PCE devices across all batches</li>
+        <li>Batch-specific insights with clear identification of sample origins</li>
+    </ul>
+
+    <h2><span class="emoji">🎯</span>Advanced Sample Selection & Filtering</h2>
+    <ul>
+        <li><strong>Granular sample control:</strong> Remove specific samples from plotting while keeping them in your dataset</li>
+        <li><strong>Detailed filtering output:</strong> See exactly which samples are kept vs. removed, with the corresponding reasons</li>
+        <li>Sample retention statistics: Track how filtering affects your dataset with percentage retention rates</li>
+        <li>Smart sample preview: Visual feedback showing selected samples with cell counts and measurement totals</li>
+    </ul>
+
+    <h2><span class="emoji">🔧</span>Interactive Plot Features</h2>
+    <ul>
+        <li><span class="highlight">Resizable plots:</span> Click and drag the bottom-right corner of any plot to resize it to your preferred dimensions</li>
+        <li>Responsive design: Plots automatically adapt to different screen sizes and zoom levels</li>
+        <li>Enhanced interactivity: Improved hover information and plot controls</li>
+        <li>Better plot organization: Cleaner layout and improved spacing between multiple plots</li>
+    </ul>
+
+    <h2><span class="emoji">📈</span>New Status-Based Analysis</h2>
+    <ul>
+        <li><strong>Automatic status detection:</strong> If your sample filenames contain markers like L1, L2, L3... (for light measurements) or D1, D2, D3... (for dark measurements), these are automatically detected and can be used for analysis</li>
+        <li>Status grouping: Create boxplots grouped "by Status" to compare L1 vs L2 vs L3 measurements across your dataset</li>
+    </ul>
+
+    <h2><span class="emoji">🎨</span>Advanced Combination Plotting</h2>
+    <p>Three powerful new plotting modes that separate data by condition/variable:</p>
+
+    <div class="sub-section">
+        <h3>"by Status and Variable"</h3>
+        <ul>
+            <li>Separate plot for each condition (e.g., BL Printing, Slot_SAM, Spin_SAM)</li>
+            <li>Each plot shows status comparison (L1, L2, L3, etc.) within that condition</li>
+            <li>Perfect for seeing how measurement repeatability varies by processing condition</li>
+        </ul>
+    </div>
+
+    <div class="sub-section">
+        <h3>"by Direction and Variable"</h3>
+        <ul>
+            <li>Separate plot for each condition</li>
+            <li>Each plot compares Forward vs Reverse scan directions within that condition</li>
+            <li>Ideal for analyzing hysteresis effects across different processing conditions</li>
+        </ul>
+    </div>
+
+    <div class="sub-section">
+        <h3>"by Cell and Variable"</h3>
+        <ul>
+            <li>Separate plot for each condition</li>
+            <li>Each plot shows different cells within that condition</li>
+            <li>Great for understanding cell-to-cell variation within each processing step</li>
+        </ul>
+    </div>
+
+    <h2><span class="emoji">🎨</span>Customizable Color Schemes</h2>
+    <ul>
+        <li><span class="highlight">30+ color palettes</span> including Plotly's sequential, qualitative, and custom schemes</li>
+        <li><strong>Live color preview:</strong> See exactly how your chosen colors will look before applying</li>
+        <li>Smart color cycling: Automatically handles cases where you need more colors than available in a scheme</li>
+        <li>Consistent theming: Selected colors apply to all plot types (boxplots, histograms, combination plots)</li>
+        <li>Professional palettes: Choose from scientific, nature, ocean, warm themes, or stick with the default</li>
+    </ul>
+
+    <h2><span class="emoji">💾</span>Improved Data Management</h2>
+    <ul>
+        <li>Status information preserved: Extracted status data is included in all exports and downloads</li>
+        <li>Enhanced Excel exports: Summary statistics and analysis results properly formatted in separate sheets</li>
+        <li>Better file organization: Cleaner naming conventions for downloaded plots and data files</li>
+        <li>Robust data validation: Better handling of edge cases and malformed data</li>
+    </ul>
+
+    <div class="conclusion">
+        <p>These updates make the JV Analysis Dashboard more powerful and user-friendly, providing deeper insights into your photovoltaic device data while maintaining the intuitive workflow you're familiar with.</p>
+    </div>
+</body>
+</html>
