@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Manual - JV Analysis Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        h1 { color: #007bff; border-bottom: 3px solid #007bff; padding-bottom: 10px; }
+        h2 { color: #28a745; margin-top: 30px; border-left: 4px solid #28a745; padding-left: 15px; }
+        h3 { color: #6c757d; margin-top: 20px; }
+        .header-info { 
+            background: linear-gradient(135deg, #007bff, #28a745);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .step-section {
+            background: white;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .workflow-step {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .tip {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .warning {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        ul, ol { margin-left: 20px; }
+        li { margin: 8px 0; }
+        code {
+            background: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .emoji { font-size: 1.2em; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-info">
+        <h1><span class="emoji">📖</span> JV Analysis Dashboard - User Manual</h1>
+        <p><strong>Version 3.0</strong> | Comprehensive Guide for Photovoltaic J-V Data Analysis</p>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">🚀</span> Getting Started</h2>
+        <p>The JV Analysis Dashboard is designed to analyze photovoltaic (solar cell) current-voltage (J-V) measurement data. Follow these steps to get started with your analysis.</p>
+        
+        <div class="workflow-step">
+            <h3>Step 1: Authentication</h3>
+            <p>Connect to the NOMAD database to access your measurement data:</p>
+            <ul>
+                <li><strong>HZB Users</strong>: Authentication happens automatically using your environment token</li>
+                <li><strong>External Users</strong>: Use your NOMAD username and password in the connection settings</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 2: Select Your Data</h3>
+            <p>Choose the batches containing your J-V measurements:</p>
+            <ul>
+                <li>Browse available batches in your account</li>
+                <li>Select one or multiple batches for analysis</li>
+                <li>The system will automatically load all J-V data from selected batches</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 3: Assign Variables</h3>
+            <p>Define what each sample represents in your experiment:</p>
+            <ul>
+                <li>Review the list of samples found in your data</li>
+                <li>Assign meaningful condition names (e.g., "BL Printing", "Slot_SAM", "1000 rpm")</li>
+                <li>These will be used for grouping and analysis</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 4: Filter Your Data</h3>
+            <p>Remove outliers and select samples for analysis:</p>
+            <ul>
+                <li>Set numerical filters (e.g., PCE < 40%, FF > 24%)</li>
+                <li>Choose specific samples to include/exclude</li>
+                <li>Select measurement direction (Forward/Reverse/Both)</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 5: Create Plots</h3>
+            <p>Generate visualizations of your data:</p>
+            <ul>
+                <li>Choose plot types (boxplots, histograms, J-V curves)</li>
+                <li>Select parameters to analyze (PCE, Voc, Jsc, FF)</li>
+                <li>Customize color schemes</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 6: Save Results</h3>
+            <p>Export your analysis:</p>
+            <ul>
+                <li>Download plots as HTML/PNG files</li>
+                <li>Export data as Excel spreadsheets</li>
+                <li>Get combined packages with all results</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">📊</span> Understanding Plot Types</h2>
+        
+        <h3>Boxplots</h3>
+        <p>Show distribution of parameters across different groups:</p>
+        <ul>
+            <li><strong>by Variable</strong>: Compare different experimental conditions</li>
+            <li><strong>by Status</strong>: Compare repeated measurements (L1, L2, L3...)</li>
+            <li><strong>by Cell</strong>: Compare different cells within samples</li>
+            <li><strong>by Direction</strong>: Compare Forward vs Reverse scans</li>
+        </ul>
+
+        <h3>Advanced Combination Plots</h3>
+        <p>Create separate plots for each condition, showing internal comparisons:</p>
+        <ul>
+            <li><strong>Status and Variable</strong>: One plot per condition, comparing L1/L2/L3 within each</li>
+            <li><strong>Direction and Variable</strong>: One plot per condition, comparing Forward/Reverse within each</li>
+            <li><strong>Cell and Variable</strong>: One plot per condition, comparing different cells within each</li>
+        </ul>
+
+        <h3>Histograms</h3>
+        <p>Show the distribution shape of any parameter with statistical overlays.</p>
+
+        <h3>J-V Curves</h3>
+        <p>Display the actual current-voltage characteristics with performance parameters annotated.</p>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">🎯</span> Filtering and Sample Selection</h2>
+        
+        <h3>Numerical Filters</h3>
+        <p>Set ranges to exclude outliers or focus on specific performance ranges:</p>
+        <table>
+            <tr><th>Parameter</th><th>Common Range</th><th>Purpose</th></tr>
+            <tr><td>PCE(%)</td><td>0 to 30</td><td>Remove unrealistic efficiency values</td></tr>
+            <tr><td>FF(%)</td><td>25 to 85</td><td>Remove cells with poor fill factors</td></tr>
+            <tr><td>Voc(V)</td><td>0.5 to 1.2</td><td>Filter based on expected voltage range</td></tr>
+            <tr><td>Jsc(mA/cm²)</td><td>-30 to 0</td><td>Remove positive current values (errors)</td></tr>
+        </table>
+
+        <h3>Sample Selection</h3>
+        <p>Choose specific samples to include in your analysis:</p>
+        <ul>
+            <li>Expand each batch to see individual samples</li>
+            <li>Uncheck samples you want to exclude</li>
+            <li>See real-time statistics of your selection</li>
+        </ul>
+
+        <div class="tip">
+            <strong>💡 Tip:</strong> Use sample selection to compare specific subsets of your data, while keeping numerical filters to remove obvious outliers.
+        </div>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">📈</span> Status-Based Analysis</h2>
+        <p>If your measurement files contain status markers (L1, L2, L3 for light measurements or D1, D2, D3 for dark), the dashboard automatically detects and uses them for analysis.</p>
+
+        <h3>Filename Examples</h3>
+        <ul>
+            <li><code>JV_FiNa_1B_L1.txt</code> → Status: <strong>L1</strong></li>
+            <li><code>sample_123_L2_measurement.txt</code> → Status: <strong>L2</strong></li>
+            <li><code>device_A_D1_dark.txt</code> → Status: <strong>D1</strong></li>
+        </ul>
+
+        <h3>Status Applications</h3>
+        <ul>
+            <li><strong>Repeatability Analysis</strong>: Compare L1 vs L2 vs L3 measurements</li>
+            <li><strong>Light vs Dark</strong>: Separate analysis of light (L) and dark (D) measurements</li>
+            <li><strong>Time Series</strong>: Track changes over multiple measurements</li>
+        </ul>
+
+        <div class="warning">
+            <strong>⚠️ Note:</strong> Dark measurements (D1, D2, etc.) are automatically filtered out in combination plots for cleaner light-focused analysis.
+        </div>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">🎨</span> Color Schemes</h2>
+        <p>Customize the appearance of your plots with over 30 color schemes:</p>
+        
+        <h3>Scheme Categories</h3>
+        <ul>
+            <li><strong>Sequential</strong>: Best for ordered data (Viridis, Plasma, Blues, Reds)</li>
+            <li><strong>Qualitative</strong>: Best for categorical data (Plotly, Set1, Set2)</li>
+            <li><strong>Custom</strong>: Themed palettes (Scientific, Nature, Ocean, Warm)</li>
+        </ul>
+
+        <div class="tip">
+            <strong>💡 Tip:</strong> Use qualitative schemes for condition comparisons and sequential schemes for status-based analysis.
+        </div>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">📁</span> Data Export Options</h2>
+        
+        <h3>Plot Downloads</h3>
+        <ul>
+            <li><strong>HTML files</strong>: Interactive plots that can be reopened and modified</li>
+            <li><strong>PNG images</strong>: Static images for publications (where supported)</li>
+            <li><strong>ZIP packages</strong>: All plots bundled together</li>
+        </ul>
+
+        <h3>Data Downloads</h3>
+        <ul>
+            <li><strong>Excel workbooks</strong>: Comprehensive data with multiple sheets including statistics</li>
+            <li><strong>CSV files</strong>: Raw data for further analysis in other tools</li>
+            <li><strong>Complete packages</strong>: Both plots and data in one download</li>
+        </ul>
+    </div>
+
+    <div class="step-section">
+        <h2><span class="emoji">🔧</span> Troubleshooting</h2>
+        
+        <h3>Common Issues</h3>
+        <ul>
+            <li><strong>Authentication fails</strong>: Check your NOMAD credentials or token</li>
+            <li><strong>No data loads</strong>: Verify the selected batches contain J-V measurements</li>
+            <li><strong>Plots don't appear</strong>: Ensure data remains after filtering</li>
+            <li><strong>Download doesn't work</strong>: Check browser popup blockers</li>
+        </ul>
+
+        <h3>Getting Help</h3>
+        <ul>
+            <li>Check the "What's New" section for recent changes</li>
+            <li>Review error messages for specific guidance</li>
+            <li>Contact your system administrator for access issues</li>
+        </ul>
+    </div>
+
+    <div style="text-align: center; font-style: italic; color: #6c757d; margin-top: 40px; padding: 20px; background: white; border-radius: 8px;">
+        <p><strong>JV Analysis Dashboard v3.0</strong></p>
+        <p>For advanced photovoltaic device characterization and analysis</p>
+    </div>
+</body>
+</html>
