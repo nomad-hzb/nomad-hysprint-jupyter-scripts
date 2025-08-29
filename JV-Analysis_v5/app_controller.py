@@ -17,6 +17,7 @@ import requests
 import json
 import sys
 from utils import save_combined_excel_data
+from resizable_plot_utility import ResizablePlotManager
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 import plotly.graph_objects as go
@@ -159,7 +160,7 @@ class JVAnalysisApp:
         )
         
         self.dynamic_content = widgets.Output()
-        self.results_content = widgets.Output(layout={'width': '400px', 'height': '300px', 'overflow': 'scroll'})
+        self.results_content = widgets.Output(layout={'width': '400px', 'height': '500px', 'overflow': 'scroll'})
         self.read_output = widgets.Output()
         self.download_content = widgets.Output()
         self.show_other_measurements = widgets.Output()
@@ -182,6 +183,7 @@ class JVAnalysisApp:
         """Create tab system"""
         self.select_upload_tab = widgets.VBox([
             widgets.HTML("<h3>Select Upload</h3>"),
+            widgets.HTML("<p><i>Select one or multiple batches</i></p>"),
             self.batch_selection_container,
             self.load_status_output
         ])
@@ -195,11 +197,14 @@ class JVAnalysisApp:
             widgets.VBox([self.show_other_measurements])
         ])
         
-        # ADD color selector to the plot tab:
+        # Create plot tab with color selector between controls and plots
         plot_tab_content = widgets.VBox([
             self.plot_ui.get_widget(),
-            widgets.HTML("<hr>"),  # Separator
-            self.color_selector.get_widget()  # ADD this line
+            widgets.HTML("<hr style='margin: 20px 0;'>"),  # Separator
+            self.color_selector.get_widget(),
+            widgets.HTML("<hr style='margin: 20px 0;'>"),  # Another separator
+            widgets.HTML("<h3>Generated Plots</h3>"),
+            self.plot_ui.plotted_content  # Now plots appear after color selection
         ])
         
         self.tabs = widgets.Tab()
@@ -497,7 +502,7 @@ If you tested specific variables or conditions for each sample, please write the
             with self.filter_ui.main_output:
                 print("No data loaded. Please load data first.")
             return
-        
+
         # Get selected samples and filter values
         selected_items = self.filter_ui.get_selected_items()
         filter_values = self.filter_ui.get_filter_values()
@@ -625,9 +630,9 @@ If you tested specific variables or conditions for each sample, please write the
                 'P_mpp': 'P_mpp(mW/cm2)'
             }
             
-            # Process each boxplot
+            # Process each boxplot for Excel export
             for plot_type, option1, option2 in plot_selections:
-                if plot_type in ['Boxplot', 'Boxplot (omitted)']:
+                if plot_type in ['Boxplot', 'Boxplot (omitted)']:  # Only process boxplots for Excel
                     # Extract parameters
                     var_y = option1  # e.g., 'PCE'
                     var_x = option2  # e.g., 'by Variable'
@@ -637,7 +642,7 @@ If you tested specific variables or conditions for each sample, please write the
                     if var_x == 'by Variable':
                         grouping_col = 'condition'
                     elif var_x == 'by Batch':
-                        grouping_col = 'batch'
+                        grouping_col = 'batch_for_plotting' if 'batch_for_plotting' in filtered_data.columns else 'batch'
                     elif var_x == 'by Sample':
                         grouping_col = 'sample'
                     elif var_x == 'by Cell':
@@ -659,24 +664,33 @@ If you tested specific variables or conditions for each sample, please write the
                     
                     # Save to Excel
                     wb = save_combined_excel_data(
-                        path="",  # Not used in this context
-                        wb=wb,
-                        data=filtered_data,
-                        filtered_info=filtered_info,
-                        var_x=grouping_col,
-                        name_y=name_y,
-                        var_y=var_y,
-                        other_df=stats_df
+                        "",
+                        wb,
+                        filtered_data,
+                        filtered_info,
+                        grouping_col,
+                        name_y,
+                        var_y,
+                        stats_df
                     )
             
-           # Create filtered curves data to match the filtered JV data
-            filtered_curves = self._create_filtered_curves_data(filtered_data, data["curves"])
+            # Use the precisely matched curves data instead of all curves
+            filtered_curves = data.get('filtered_curves', pd.DataFrame())
+            if filtered_curves.empty:
+                # Fallback to creating filtered curves if not available
+                filtered_curves = self._create_filtered_curves_data(filtered_data, data["curves"])
             
-            # Prepare data tuple
+            # For JV curve plots, we want ALL curves data for complete plots
+            all_curves_for_plotting = data["curves"]  # Use complete curves data
+            
+            # Create properly filtered curves for working/rejected cell plots
+            filtered_curves_for_jv_plots = self._create_matching_curves_from_filtered_jv(filtered_data, data["curves"])
+
+            # Prepare data tuple with ALL curves for complete dataset access
             jv_data = (
                 filtered_data,           # filtered data for analysis
-                data["jvc"],            # complete original data for reference
-                filtered_curves         # curves data matching filtered samples
+                data["jvc"],            # complete original data for reference  
+                data["curves"]          # CHANGE: Use complete original curves, not filtered_curves
             )
             
             support_data = (
@@ -701,39 +715,10 @@ If you tested specific variables or conditions for each sample, please write the
             self.global_plot_data['names'] = names
             self.global_plot_data['workbook'] = wb
             
-            # Display plots (this will clear the processing message)
+            # Display plots using resizable plot utility
             with self.plot_ui.plotted_content:
                 clear_output(wait=True)
-                print(f"✅ Successfully created {len(figs)} plots")
-                
-                for i, (fig, name) in enumerate(zip(figs, names)):
-                    try:
-                        # Check if it's a Plotly figure and display accordingly
-                        if hasattr(fig, 'data') and hasattr(fig, 'layout'):
-                            fig_widget = go.FigureWidget(fig)
-                            fig_widget.update_layout(
-                                autosize=True, 
-                                margin=dict(l=50, r=50, t=50, b=50),
-                                height=600,
-                                width=800
-                            )
-                            display(widgets.HTML(f"<h3>{name}</h3>"))
-                            display(fig_widget)
-                        else:
-                            display(widgets.HTML(f"<h3>{name}</h3>"))
-                            display(fig)
-                            
-                    except Exception as e:
-                        print(f"Error displaying plot {i+1} ({name}): {e}")
-                        try:
-                            display(widgets.HTML(f"<h3>{name} (Alternative Display)</h3>"))
-                            if hasattr(fig, 'show'):
-                                fig.show()
-                            else:
-                                display(fig)
-                        except Exception as e2:
-                            print(f"Could not display plot {name}: {e2}")
-                
+                ResizablePlotManager.display_plots_resizable(figs, names, self.plot_ui.plotted_content)
                 print("Proceed to the next tab to save your results.")
                 self._enable_tab(4)
         
@@ -748,23 +733,73 @@ If you tested specific variables or conditions for each sample, please write the
                 </div>
                 """))
             ErrorHandler.handle_plot_error(e, self.plot_ui.plotted_content)
+
+    def _create_matching_curves_from_filtered_jv(self, filtered_jv_data, original_curves_data):
+        """Create curves data that exactly matches filtered JV data using sample_id"""
+        
+        if filtered_jv_data.empty:
+            return pd.DataFrame()
+        
+        # Get unique sample_id + cell + direction + ilum combinations from filtered JV
+        filtered_combinations = set()
+        for _, row in filtered_jv_data.iterrows():
+            combination = (row['sample_id'], row['cell'], row['direction'], row['ilum'])
+            filtered_combinations.add(combination)
+        
+        # Filter curves data to match exactly
+        def should_include_curve(curve_row):
+            if 'sample_id' not in curve_row:
+                return False
+            combination = (curve_row['sample_id'], curve_row['cell'], curve_row['direction'], curve_row['ilum'])
+            return combination in filtered_combinations
+        
+        matching_curves = original_curves_data[original_curves_data.apply(should_include_curve, axis=1)].copy()
+
+        return matching_curves
     
     def _create_filtered_curves_data(self, filtered_jv_data, original_curves_data):
-        """Create curves data that matches the filtered JV data"""
-        import pandas as pd
+        """Create curves data that matches filtered JV data with debugging"""
         
-        # Get the sample-cell combinations that remain in filtered data
+        # Get sample-cell combinations from filtered JV data
         filtered_combinations = set()
         for _, row in filtered_jv_data.iterrows():
             filtered_combinations.add((row['sample'], row['cell']))
         
-        # Filter curves data to match
+        # Try exact matching first
         def should_include_curve(row):
             return (row['sample'], row['cell']) in filtered_combinations
         
         filtered_curves = original_curves_data[
             original_curves_data.apply(should_include_curve, axis=1)
         ].copy()
+        
+        print(f"DEBUG: Exact matching found {len(filtered_curves)} curve records")
+        
+        # If exact matching fails, try alternative sample name matching
+        if len(filtered_curves) == 0:
+            print("DEBUG: Trying alternative sample name matching...")
+            
+            # Extract clean sample names from both datasets for comparison
+            jv_clean_samples = set()
+            for _, row in filtered_jv_data.iterrows():
+                # Extract the core sample name (like C-11)
+                clean_name = row['sample'].split('_')[-1] if '_' in row['sample'] else row['sample']
+                jv_clean_samples.add((clean_name, row['cell']))
+            
+            def should_include_curve_alt(row):
+                curve_clean = row['sample'].split('_')[-1] if '_' in row['sample'] else row['sample']
+                return (curve_clean, row['cell']) in jv_clean_samples
+            
+            filtered_curves = original_curves_data[
+                original_curves_data.apply(should_include_curve_alt, axis=1)
+            ].copy()
+            
+            print(f"DEBUG: Alternative matching found {len(filtered_curves)} curve records")
+        
+        # Always return a DataFrame, even if empty
+        if filtered_curves is None or len(filtered_curves) == 0:
+            print("DEBUG: No matching curves found, returning empty DataFrame")
+            return original_curves_data.iloc[0:0].copy()  # Return empty DataFrame with same structure
         
         return filtered_curves
     

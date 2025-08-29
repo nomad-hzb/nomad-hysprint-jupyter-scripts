@@ -90,18 +90,35 @@ class DataManager:
             sample_ids = get_ids_in_batch(url, token, batch_ids)
             identifiers = get_sample_description(url, token, sample_ids)
             
-            # Process JV data
-            df_jvc, df_cur = self._process_jv_data_for_analysis(sample_ids, output_widget)
+            df_jvc, df_cur = self._process_jv_data_for_analysis(sample_ids, output_widget, batch_ids)
             
             # Store data
             self.data["jvc"] = pd.concat([self.data.get("jvc", pd.DataFrame()), df_jvc], ignore_index=True)
             self.data["curves"] = pd.concat([self.data.get("curves", pd.DataFrame()), df_cur], ignore_index=True)
             
+            # Verify data was loaded successfully before processing
+            if self.data["jvc"].empty:
+                if output_widget:
+                    with output_widget:
+                        print("Error: No JV data was loaded successfully")
+                return False
+            
             # Process sample information
             self._process_sample_info(identifiers)
+
+            if output_widget:
+                with output_widget:
+                    if not self.data['jvc'].empty:
+                        best_main = self.data['jvc'].loc[self.data['jvc']["PCE(%)"].idxmax()]
             
             # Export data
             self._export_data(df_jvc, df_cur)
+
+            # DIAGNOSTIC: Check data before and after processing
+            if output_widget:
+                with output_widget:
+                    if not df_jvc.empty:
+                        best_export = df_jvc.loc[df_jvc["PCE(%)"].idxmax()]
             
             # Find unique values
             self.unique_vals = self._find_unique_values()
@@ -116,12 +133,13 @@ class DataManager:
             ErrorHandler.handle_data_loading_error(e, output_widget)
             return False
     
-    def _process_jv_data_for_analysis(self, sample_ids, output_widget=None):
+    def _process_jv_data_for_analysis(self, sample_ids, output_widget=None, batch_ids=None):
         """Process JV data for analysis from sample IDs"""
         columns_jvc = ['Voc(V)', 'Jsc(mA/cm2)', 'FF(%)', 'PCE(%)', 'V_mpp(V)', 'J_mpp(mA/cm2)',
                       'P_mpp(mW/cm2)', 'R_series(Ohmcm2)', 'R_shunt(Ohmcm2)', 'sample', 'batch',
-                      'condition', 'cell', 'direction', 'ilum', 'status']
-        columns_cur = ['index', 'sample', 'batch', 'condition', 'variable', 'cell', 'direction', 'ilum']
+                      'condition', 'cell', 'direction', 'ilum', 'status', 'sample_id']
+        
+        columns_cur = ['index', 'sample', 'batch', 'condition', 'variable', 'cell', 'direction', 'ilum', 'sample_id', 'status']
         rows_jvc = []
         rows_cur = []
         
@@ -133,8 +151,66 @@ class DataManager:
                 with output_widget:
                     print("Fetching JV data...")
             
-            all_jvs = get_all_JV(url, token, sample_ids)
+            # Process each batch individually to handle corrupted ones
+            all_jvs = {}
+            successful_batches = []
+            failed_batches = []
             
+            # Group sample_ids by batch for individual processing
+            from api_calls import get_ids_in_batch
+            
+            for batch_id in batch_ids:
+                try:
+                    if output_widget:
+                        with output_widget:
+                            print(f"Processing batch: {batch_id}")
+                    
+                    batch_sample_ids = get_ids_in_batch(url, token, [batch_id])
+                    batch_jvs = get_all_JV(url, token, batch_sample_ids)
+                    
+                    # Merge this batch's data into the main collection
+                    all_jvs.update(batch_jvs)
+                    successful_batches.append(batch_id)
+                    
+                except KeyError as e:
+                    if output_widget:
+                        with output_widget:
+                            print(f"⚠️ Skipping corrupted batch '{batch_id}' - missing field '{e.args[0]}'")
+                    failed_batches.append(batch_id)
+                    continue
+                except Exception as e:
+                    if output_widget:
+                        with output_widget:
+                            print(f"⚠️ Skipping problematic batch '{batch_id}' - {str(e)}")
+                    failed_batches.append(batch_id)
+                    continue
+            
+            if output_widget:
+                with output_widget:
+                    print(f"✅ Successfully processed {len(successful_batches)} batches")
+                    if failed_batches:
+                        print(f"⚠️ Skipped {len(failed_batches)} corrupted batches: {failed_batches}")
+            
+            # Continue with the successfully loaded data
+            if not all_jvs:
+                if output_widget:
+                    with output_widget:
+                        print("❌ No valid JV data could be loaded from any batch")
+                return pd.DataFrame(), pd.DataFrame()
+            
+            # First pass: determine maximum number of data points across all curves
+            max_data_points = 0
+            for sid in sample_ids:
+                jv_res = all_jvs.get(sid, [])
+                for jv_data, jv_md in jv_res:
+                    for c in jv_data["jv_curve"]:
+                        max_data_points = max(max_data_points, len(c["voltage"]), len(c["current_density"]))
+            
+            # Add data point columns to columns_cur
+            for i in range(max_data_points):
+                columns_cur.append(i)
+            
+            # Second pass: process the data with correct column structure
             for sid in sample_ids:
                 jv_res = all_jvs.get(sid, [])
                 if output_widget:
@@ -148,7 +224,11 @@ class DataManager:
                         illum = "Dark" if "dark" in c["cell_name"].lower() else "Light"
                         cell = c["cell_name"][0]
                         direction = "Forward" if "for" in c["cell_name"].lower() else "Reverse"
+    
+                        # Extract the sample name: split by '/' to get filename, then split by '.' to remove extension
+                        sample_clean = file_name.split('/')[-1].split('.')[0]
                         
+                        # JV data processing with sample_id
                         row = [
                             c["open_circuit_voltage"],
                             -c["short_circuit_current_density"],
@@ -159,47 +239,50 @@ class DataManager:
                             -c["potential_at_maximum_power_point"] * c["current_density_at_maximun_power_point"],
                             c["series_resistance"],
                             c["shunt_resistance"],
-                            file_name,
+                            sample_clean,
                             file_name.split("/")[1],
                             "w",
                             cell,
                             direction,
                             illum,
-                            status  # ADD this line
+                            status,
+                            sid  # API sample ID
                         ]
                         rows_jvc.append(row)
                         
-                        # Process voltage data
+                        # Process voltage data with proper padding
                         row_v = [
                             "_".join(["Voltage (V)", cell, direction, illum]),
-                            file_name,
+                            sample_clean,
                             file_name.split("/")[1],
                             "w",
                             "Voltage (V)",
                             cell,
                             direction,
-                            illum
+                            illum,
+                            sid,  # API sample ID
+                            status  # ADD status to curves data
                         ]
-                        row_v.extend(c["voltage"])
+                        # Extend with voltage data and pad with None if needed
+                        voltage_data = c["voltage"] + [None] * (max_data_points - len(c["voltage"]))
+                        row_v.extend(voltage_data)
                         
-                        # Process current density data
+                        # Process current density data with proper padding
                         row_j = [
                             "_".join(["Current Density(mA/cm2)", cell, direction, illum]),
-                            file_name,
+                            sample_clean,
                             file_name.split("/")[1],
                             "w",
                             "Current Density(mA/cm2)",
                             cell,
                             direction,
-                            illum
+                            illum,
+                            sid,  # API sample ID
+                            status  # ADD status to curves data
                         ]
-                        row_j.extend(c["current_density"])
-                        
-                        # Update columns_cur with new indices for both voltage and current
-                        max_data_points = max(len(c["voltage"]), len(c["current_density"]))
-                        for i in range(max_data_points):
-                            if i not in columns_cur:
-                                columns_cur.append(i)
+                        # Extend with current data and pad with None if needed
+                        current_data = c["current_density"] + [None] * (max_data_points - len(c["current_density"]))
+                        row_j.extend(current_data)
                         
                         rows_cur.append(row_v)
                         rows_cur.append(row_j)
@@ -212,26 +295,60 @@ class DataManager:
         except Exception as e:
             ErrorHandler.handle_data_loading_error(e, output_widget)
             return pd.DataFrame(), pd.DataFrame()
+
+    def _create_matching_curves_from_filtered_jv(self, filtered_jv_df):
+        """Create curves data that exactly matches filtered JV data using sample_id"""
+        if not hasattr(self, 'data') or 'curves' not in self.data or filtered_jv_df.empty:
+            return pd.DataFrame()
+        
+        # Get unique sample_id + cell + direction + ilum combinations from filtered JV
+        filtered_combinations = set()
+        for _, row in filtered_jv_df.iterrows():
+            combination = (row['sample_id'], row['cell'], row['direction'], row['ilum'])
+            filtered_combinations.add(combination)
+        
+        # Filter curves data to match exactly
+        def should_include_curve(curve_row):
+            if 'sample_id' not in curve_row:
+                return False
+            combination = (curve_row['sample_id'], curve_row['cell'], curve_row['direction'], curve_row['ilum'])
+            return combination in filtered_combinations
+        
+        curves_data = self.data['curves']
+        matching_curves = curves_data[curves_data.apply(should_include_curve, axis=1)].copy()
+        
+        return matching_curves
     
     def _process_sample_info(self, identifiers):
         """Process sample information and create identifiers with enhanced deduplication"""
-        # Store original sample paths before cleaning
+        if "jvc" not in self.data or self.data["jvc"].empty:
+            print("Warning: No JV data available for processing sample info")
+            return
+        
+        if "sample" not in self.data["jvc"].columns:
+            print("Warning: 'sample' column missing from JV data")
+            print(f"Available columns: {list(self.data['jvc'].columns)}")
+            return
+        
+        # Store original sample paths before cleaning - but now sample is already clean
         self.data["jvc"]["original_sample"] = self.data["jvc"]["sample"].copy()
         
+        # Extract subbatch using rsplit to get the second-to-last part
         self.data["jvc"]["subbatch"] = self.data["jvc"]["sample"].apply(
-            lambda x: x.split('/')[-1].split('.')[0].split('_')[-2]
+            lambda x: x.split('_')[-2] if len(x.split('_')) >= 2 else x
         )
         
         # Extract human-readable batch name for display using original paths
         def extract_display_batch(sample_path):
             filename = sample_path.split('/')[-1].split('.')[0]
-            parts = filename.split('_')
             
-            if len(parts) >= 2:
-                batch_parts = parts[:-1]
-                result = '_'.join(batch_parts)
+            # Use rsplit to remove the last 2 parts, regardless of how many underscores are in the name
+            if '_' in filename:
+                # Split from the right and keep everything except the last 2 parts
+                parts = filename.rsplit('_', 2)  # Split into max 3 parts from the right
+                result = parts[0]  # Take everything before the last 2 underscores
             else:
-                result = parts[0] if parts else "unknown"
+                result = filename
             
             return result
         
@@ -255,66 +372,6 @@ class DataManager:
             self.data["jvc"]["identifier"] = self.data["jvc"]["sample"].apply(
                 lambda x: "_".join(x.split('/')[-1].split(".")[0].split("_")[:-1])
             )
-        
-        # Clean sample names AFTER extracting display batch
-        self.data["jvc"]["sample"] = self.data["jvc"]["sample"].apply(
-            lambda x: x.split('/')[-1].split('.')[0].split('_', 4)[-1]
-        )
-        self.data["curves"]["sample"] = self.data["curves"]["sample"].apply(
-            lambda x: x.split('/')[-1].split('.')[0].split('_', 4)[-1]
-        )
-        
-        # Enhanced deduplication strategy
-        grouped = self.data['jvc'].groupby(['sample', 'cell', 'direction', 'ilum'])
-        
-        rows_to_keep = []
-        duplicate_issue_count = 0
-        
-        for name, group in grouped:
-            unique_identifiers = group['identifier'].unique()
-            
-            if len(unique_identifiers) == 1:
-                # Simple case: all records have same identifier, keep first
-                rows_to_keep.append(group.iloc[0].name)
-            else:
-                # Complex case: multiple identifiers for same physical measurement
-                duplicate_issue_count += 1
-                
-                # Strategy: prefer non-empty/meaningful identifiers
-                best_idx = None
-                best_score = -1
-                
-                for idx, row in group.iterrows():
-                    identifier = str(row['identifier'])
-                    score = 0
-                    
-                    # Prefer identifiers with meaningful content after &
-                    if '&' in identifier:
-                        variation = identifier.split('&', 1)[1]
-                        if variation and variation != 'No variation specified' and variation != 'w':
-                            score += 10
-                            # Prefer certain keywords
-                            if any(keyword in variation for keyword in ['BL Printing', 'Slot_SAM', 'Spin_SAM']):
-                                score += 5
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_idx = idx
-                
-                # If no clear winner, just take the first
-                if best_idx is None:
-                    best_idx = group.iloc[0].name
-                
-                rows_to_keep.append(best_idx)
-        
-        # Keep only the selected rows
-        self.data['jvc'] = self.data['jvc'].loc[rows_to_keep].reset_index(drop=True)
-        
-        # Also deduplicate curves data to match
-        self.data['curves'] = self.data['curves'].drop_duplicates(
-            subset=['sample', 'cell', 'direction', 'ilum', 'variable'],
-            keep='first'
-        ).reset_index(drop=True)
     
     def _export_data(self, df_jvc, df_cur):
         """Store data for potential export"""
@@ -420,6 +477,16 @@ class DataManager:
         # Clean up filter reason string
         omitted['filter_reason'] = omitted['filter_reason'].str.rstrip(', ')
         
+        if 'display_batch' in filtered.columns:
+            filtered['batch_for_plotting'] = filtered['display_batch']
+        else:
+            filtered['batch_for_plotting'] = filtered['batch']
+        
+        if 'display_batch' in omitted.columns:
+            omitted['batch_for_plotting'] = omitted['display_batch']
+        else:
+            omitted['batch_for_plotting'] = omitted['batch']
+        
         # Store results
         self.filtered_data = filtered
         self.omitted_data = omitted
@@ -428,6 +495,17 @@ class DataManager:
         # Update main data dict
         self.data['filtered'] = filtered
         self.data['junk'] = omitted
+        
+        # CREATE MATCHING CURVES DATA - ADD THIS BLOCK:
+        if not filtered.empty and 'sample_id' in filtered.columns:
+            # Create curves data that exactly matches filtered JV data
+            matching_curves = self._create_matching_curves_from_filtered_jv(filtered)
+            self.data['filtered_curves'] = matching_curves
+            
+            if verbose:
+                print(f"Created {len(matching_curves)} matching curve records for filtered data")
+        else:
+            self.data['filtered_curves'] = pd.DataFrame()
         
         return filtered, omitted, filtering_options
     
@@ -454,8 +532,8 @@ class DataManager:
             if 'display_batch' in df.columns:
                 highest_PCE_per_sample = df.loc[df.groupby(['sample'])['PCE(%)'].idxmax(), ['batch', 'sample', 'cell', 'PCE(%)', 'display_batch']]
                 highest_PCE_per_sample = highest_PCE_per_sample.copy()
-                highest_PCE_per_sample['display_name'] = highest_PCE_per_sample['display_batch'] + '_' + highest_PCE_per_sample['sample']
-                max_PCE_display_name = max_PCE_row.get('display_batch', max_PCE_row.get('batch', '')) + '_' + max_PCE_row['sample']
+                highest_PCE_per_sample['display_name'] = highest_PCE_per_sample['sample']  # Use consistent sample naming
+                max_PCE_display_name = max_PCE_row['sample']  # Use consistent naming
             else:
                 highest_PCE_per_sample = df.loc[df.groupby(['sample'])['PCE(%)'].idxmax(), ['batch', 'sample', 'cell', 'PCE(%)']]
                 highest_PCE_per_sample = highest_PCE_per_sample.copy()
