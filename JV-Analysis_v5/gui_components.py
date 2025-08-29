@@ -17,51 +17,65 @@ import requests
 import json
 import plotly.express as px
 
-# Import WidgetFactory from plotting_utils
-try:
-    from plotting_utils import WidgetFactory
-except ImportError:
-    # Fallback if plotting_utils not available
-    class WidgetFactory:
-        @staticmethod
-        def create_button(description, button_style='', tooltip='', icon='', min_width=True):
-            layout = widgets.Layout(min_width='150px') if min_width else widgets.Layout(width='auto')
-            return widgets.Button(description=description, button_style=button_style, tooltip=tooltip, icon=icon, layout=layout)
-        
-        @staticmethod
-        def create_dropdown(options, description='', width='standard', value=None):
-            dropdown = widgets.Dropdown(options=options, description=description)
-            if value is not None:
-                dropdown.value = value
-            return dropdown
-        
-        @staticmethod
-        def create_text_input(placeholder='', description='', width='standard', password=False):
-            widget_class = widgets.Password if password else widgets.Text
-            return widget_class(placeholder=placeholder, description=description, style={'description_width': 'initial'})
-        
-        @staticmethod
-        def create_output(min_height='standard', scrollable=False, border=True):
-            layout_props = {}
-            if scrollable:
-                layout_props.update({'width': '400px', 'height': '300px', 'overflow': 'scroll'})
-            if border:
-                layout_props.update({'border': '1px solid #eee', 'padding': '10px', 'margin': '10px 0 0 0'})
-            return widgets.Output(layout=widgets.Layout(**layout_props))
-        
-        @staticmethod
-        def create_radio_buttons(options, description='', value=None, width='standard'):
-            radio = widgets.RadioButtons(options=options, description=description)
-            if value is not None:
-                radio.value = value
-            return radio
-        
-        @staticmethod
-        def create_filter_row():
-            dropdown1 = widgets.Dropdown(options=['Voc(V)', 'Jsc(mA/cm2)', 'FF(%)', 'PCE(%)', 'V_MPP(V)', 'J_MPP(mA/cm2)'])
-            dropdown2 = widgets.Dropdown(options=['>', '>=', '<', '<=', '==', '!='])
-            text_input = widgets.Text(placeholder='Write a value')
-            return widgets.HBox([dropdown1, dropdown2, text_input])
+class WidgetFactory:
+    @staticmethod
+    def create_button(description, button_style='', tooltip='', icon='', min_width=True):
+        layout = widgets.Layout(min_width='150px') if min_width else widgets.Layout(width='auto')
+        return widgets.Button(
+            description=description, 
+            button_style=button_style, 
+            tooltip=tooltip, 
+            icon=icon, 
+            layout=layout
+        )
+    
+    @staticmethod
+    def create_dropdown(options, description='', width='standard', value=None):
+        dropdown = widgets.Dropdown(options=options, description=description)
+        if value is not None:
+            dropdown.value = value
+        return dropdown
+    
+    @staticmethod
+    def create_text_input(placeholder='', description='', width='standard', password=False):
+        widget_class = widgets.Password if password else widgets.Text
+        return widget_class(
+            placeholder=placeholder, 
+            description=description, 
+            style={'description_width': 'initial'}
+        )
+    
+    @staticmethod
+    def create_output(min_height='standard', scrollable=False, border=True):
+        layout_props = {}
+        if scrollable:
+            layout_props.update({'width': '400px', 'height': '300px', 'overflow': 'scroll'})
+        if border:
+            layout_props.update({'border': '1px solid #eee', 'padding': '10px', 'margin': '10px 0 0 0'})
+        return widgets.Output(layout=widgets.Layout(**layout_props))
+    
+    @staticmethod
+    def create_radio_buttons(options, description='', value=None, width='standard'):
+        radio = widgets.RadioButtons(options=options, description=description)
+        if value is not None:
+            radio.value = value
+        return radio
+    
+    @staticmethod
+    def create_filter_row():
+        dropdown1 = widgets.Dropdown(
+            options=['Voc(V)', 'Jsc(mA/cm2)', 'FF(%)', 'PCE(%)', 'V_MPP(V)', 'J_MPP(mA/cm2)'],
+            layout=widgets.Layout(width='66%')
+        )
+        dropdown2 = widgets.Dropdown(
+            options=['>', '>=', '<', '<=', '==', '!='],
+            layout=widgets.Layout(width='33%')
+        )
+        text_input = widgets.Text(
+            placeholder='Write a value',
+            layout=widgets.Layout(width='33%')
+        )
+        return widgets.HBox([dropdown1, dropdown2, text_input])
 
 
 class AuthenticationUI:
@@ -251,6 +265,8 @@ class FilterUI:
             options=list(self.filter_presets.keys()),
             description='Filters'
         )
+        self.preset_dropdown.layout.width = 'fit-content'
+        self.preset_dropdown.layout.align_self = 'flex-end'
         
         self.direction_radio = WidgetFactory.create_radio_buttons(
             options=['Both', 'Reverse', 'Forward'],
@@ -279,7 +295,11 @@ class FilterUI:
         )
         
         self.condition_selection_content = widgets.Output(
-            layout=widgets.Layout(display='flex')
+            layout=widgets.Layout(
+                display='flex',
+                width='100%',
+                overflow='visible'
+            )
         )
         
         # Store data and selections for sample-based approach
@@ -310,7 +330,7 @@ class FilterUI:
             self.add_button, self.remove_button, 
             self.preset_dropdown, self.apply_preset_button,
             widgets.HBox([self.apply_filter_button])
-        ])
+        ], layout=widgets.Layout(width='200px'))
         
         self.top_section = widgets.HBox([
             self.controls,
@@ -475,7 +495,10 @@ class FilterUI:
                         value=True,
                         description=checkbox_label,
                         style={'description_width': 'initial'},
-                        layout=widgets.Layout(margin='2px 0 2px 20px')
+                        layout=widgets.Layout(
+                            margin='2px 0 2px 20px',
+                            width='auto'
+                        )
                     )
                     
                     sample_key = f"{batch}_{sample}"
@@ -499,7 +522,13 @@ class FilterUI:
                 batch_widgets.append(batch_section)
             
             # Display all batches
-            all_batches_display = widgets.VBox(batch_widgets, layout=widgets.Layout(width='100%'))
+            all_batches_display = widgets.VBox(
+                batch_widgets, 
+                layout=widgets.Layout(
+                    width='100%',
+                    overflow='visible'
+                )
+            )
             display(all_batches_display)
             
             # Status display
@@ -660,7 +689,8 @@ class PlotUI:
             "Preset 2": [("Boxplot", "Voc", "by Cell"), ("Histogram", "Voc", ""), 
                         ("JV Curve", "Best device only", "")],
             "Advanced Analysis": [("Boxplot", "PCE", "by Status"), ("Boxplot", "PCE", "by Status and Variable"),
-                                 ("Boxplot", "PCE", "by Direction and Variable"), ("Boxplot", "PCE", "by Cell and Variable")]
+                                 ("Boxplot", "PCE", "by Direction and Variable"), ("Boxplot", "PCE", "by Cell and Variable"),
+                                 ("Boxplot", "PCE", "by Direction, Status and Variable")]
         }
         self._create_widgets()
         self._setup_observers()
@@ -670,8 +700,9 @@ class PlotUI:
         """Create plot widgets"""
         self.preset_dropdown = WidgetFactory.create_dropdown(
             options=list(self.plot_presets.keys()),
-            description='Presets'
+            description='Presets',
         )
+        self.preset_dropdown.layout = widgets.Layout(width='150px')
         
         self.add_button = WidgetFactory.create_button("Add Plot Type", 'primary')
         self.remove_button = WidgetFactory.create_button("Remove Plot Type", 'danger')
@@ -695,19 +726,22 @@ class PlotUI:
         plot_type_dropdown = WidgetFactory.create_dropdown(
             options=['Boxplot', 'Boxplot (omitted)', 'Histogram', 'JV Curve'],
             description='Plot Type:',
-            width='wide'
+            #width='wide'
+            width='100px'
         )
         
         option1_dropdown = WidgetFactory.create_dropdown(
             options=[],
             description='Option 1:',
-            width='extra_wide'
+            #width='wide'
+            width='100px'
         )
         
         option2_dropdown = WidgetFactory.create_dropdown(
             options=[],
             description='Option 2:',
-            width='extra_wide'
+            #width='wide'
+            width='100px'
         )
         
         # Update options based on plot type
@@ -723,16 +757,21 @@ class PlotUI:
         """Update option dropdowns based on plot type"""
         plot_type = plot_type_dropdown.value
         
-        if plot_type in ['Boxplot', 'Boxplot (omitted)']:
+        if plot_type == 'Boxplot':
             option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
             option2_dropdown.options = ['by Batch', 'by Variable', 'by Sample', 'by Cell', 'by Scan Direction',
-                                       'by Status', 'by Status and Variable', 'by Direction and Variable', 'by Cell and Variable']
+                                       'by Status', 'by Status and Variable', 'by Direction and Variable', 'by Cell and Variable',
+                                       'by Direction, Status and Variable']
+        elif plot_type == 'Boxplot (omitted)':
+            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
+            option2_dropdown.options = ['by Batch', 'by Variable', 'by Sample', 'by Cell', 'by Scan Direction', 'by Status']
         elif plot_type == 'Histogram':
             option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
             option2_dropdown.options = ['']
         elif plot_type == 'JV Curve':
-            option1_dropdown.options = ['All cells', 'Only working cells', 'Only not working cells', 
-                                       'Best device only', 'Separated by cell', 'Separated by substrate']
+            option1_dropdown.options = ['All cells', 'Only working cells', 'Rejected cells', 
+                                       'Best device only', 'Separated by cell (all)', 'Separated by cell (working only)', 
+                                       'Separated by substrate (all)', 'Separated by substrate (working only)']
             option2_dropdown.options = ['']
         else:
             option1_dropdown.options = []
@@ -791,8 +830,8 @@ class PlotUI:
         return widgets.VBox([
             widgets.HTML("<h3>Select Plots</h3>"),
             widgets.HTML("<p>Using the dropdowns below, select the plots you want to create.</p>"),
-            widgets.HBox([self.controls, self.groups_container]),
-            self.plotted_content
+            widgets.HBox([self.controls, self.groups_container])
+            # plotted_content moved to main app layout
         ])
 
 
@@ -1011,30 +1050,31 @@ class ColorSchemeSelector:
             display(HTML(html_preview))
     
     def get_colors(self, num_colors=None, sampling='sequential'):
-        """Get colors from selected scheme with optional even sampling"""
+        """Get colors from selected scheme with improved sampling"""
         colors = self.color_schemes[self.selected_scheme]
         
         if num_colors is None:
             return colors
         
         if sampling == 'even' and len(colors) > num_colors:
-            # Sample evenly across the color range
+            # Improved even sampling - distribute across the full spectrum
+            if num_colors == 1:
+                return [colors[len(colors)//2]]  # Take middle color for single color
+            
+            # Generate evenly spaced indices across the full color range
             indices = []
-            step = len(colors) / num_colors
             for i in range(num_colors):
-                index = int(i * step)
-                # Ensure we don't exceed the array bounds
-                if index >= len(colors):
-                    index = len(colors) - 1
+                # Map i from [0, num_colors-1] to [0, len(colors)-1]
+                index = int(round(i * (len(colors) - 1) / (num_colors - 1)))
                 indices.append(index)
             
             return [colors[i] for i in indices]
-        
+            
         elif num_colors <= len(colors):
-            # Sequential sampling (original behavior)
+            # Sequential sampling - take first n colors
             return colors[:num_colors]
         else:
-            # Repeat colors if we need more than available
+            # Need more colors than available - cycle through the scheme
             repeated_colors = []
             for i in range(num_colors):
                 repeated_colors.append(colors[i % len(colors)])
@@ -1098,7 +1138,14 @@ class InfoUI:
         """Load HTML content from file and make it Voila-friendly"""
         try:
             import os
-            file_path = os.path.join(os.getcwd(), filename)
+            # Get the directory where this Python file is located
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(current_dir, filename)
+            
+            # Fallback to current working directory if file not found
+            if not os.path.exists(file_path):
+                file_path = os.path.join(os.getcwd(), filename)
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             

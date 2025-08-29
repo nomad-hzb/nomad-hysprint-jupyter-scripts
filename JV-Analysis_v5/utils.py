@@ -94,14 +94,6 @@ def is_running_in_jupyter():
         return False
 
 
-def natural_keys(text):
-    """Natural sorting key function for alphanumeric strings"""
-    import re
-    def atoi(text):
-        return int(text) if text.isdigit() else text
-    return [atoi(c) for c in re.split(r'(\d+)', text)]
-
-
 def create_new_results_folder(path):
     """Create a results folder if it doesn't exist"""
     folder_path = os.path.join(path, 'Results')
@@ -119,69 +111,3 @@ def clean_filename(filename):
     # Remove invalid characters for filenames
     filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
     return filename
-
-
-def export_to_csv(dataframes, path=""):
-    """Export multiple dataframes to CSV files"""
-    for name, df in dataframes.items():
-        try:
-            filename = os.path.join(path, f"export_{name}.csv")
-            df.to_csv(filename, index=False)
-            print(f"Exported {name} to {filename}")
-        except Exception as e:
-            print(f"Warning: Could not export {name} to CSV: {e}")
-
-
-def validate_data_structure(data):
-    """Validate that data structure contains required keys and is properly formatted"""
-    required_keys = ['jvc', 'curves']
-    
-    if not isinstance(data, dict):
-        return False, "Data must be a dictionary"
-    
-    for key in required_keys:
-        if key not in data:
-            return False, f"Missing required key: {key}"
-        
-        if not isinstance(data[key], pd.DataFrame):
-            return False, f"Key '{key}' must contain a pandas DataFrame"
-        
-        if data[key].empty:
-            return False, f"DataFrame '{key}' is empty"
-    
-    # Check for required columns in jvc data
-    required_jvc_columns = ['PCE(%)', 'sample', 'cell']
-    for col in required_jvc_columns:
-        if col not in data['jvc'].columns:
-            return False, f"Missing required column '{col}' in jvc data"
-    
-    return True, "Data structure is valid"
-
-
-def get_file_size_mb(filepath):
-    """Get file size in megabytes"""
-    try:
-        size_bytes = os.path.getsize(filepath)
-        size_mb = size_bytes / (1024 * 1024)
-        return round(size_mb, 2)
-    except OSError:
-        return 0
-
-
-def create_download_link(content, filename, content_type='application/octet-stream'):
-    """Create a download link for content (for use in Jupyter)"""
-    import base64
-    from IPython.display import HTML
-    
-    if isinstance(content, str):
-        content = content.encode()
-    
-    b64 = base64.b64encode(content).decode()
-    return HTML(f'''
-    <a download="{filename}" 
-       href="data:{content_type};base64,{b64}" 
-       style="background-color: #4CAF50; color: white; padding: 10px 20px; 
-              text-decoration: none; border-radius: 4px; display: inline-block;">
-        Download {filename}
-    </a>
-    ''')
