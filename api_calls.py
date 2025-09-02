@@ -83,6 +83,36 @@ def get_ids_in_batch(url, token,batch_ids, batch_type="HySprint_Batch"):
             sample_ids.extend([s["lab_id"] for s in dd["entities"]])
     return sample_ids
 
+def get_all_batches_wth_data(url, token, entry_type):
+    query = {
+        'required': {
+            'metadata': {'upload_id': '*'}
+        },
+        'owner': 'visible',
+        'query': {'entry_type':entry_type},
+        'pagination': {
+            'page_size': 10000
+        }
+    }
+
+    response = requests.post(
+        f'{url}/entries/archive/query', headers={'Authorization': f'Bearer {token}'}, json=query)
+    upload_ids = list(set([u["upload_id"] for u in response.json()["data"]]))
+    query = {
+        'required': {
+            'data': '*'
+        },
+        'owner': 'visible',
+        'query': {'entry_type':"HySprint_Batch", "upload_id:any": upload_ids},
+        'pagination': {
+            'page_size': 10000
+        }
+    }
+    response = requests.post(
+        f'{url}/entries/archive/query', headers={'Authorization': f'Bearer {token}'}, json=query)
+
+    return list(set([b["archive"]["data"]["lab_id"] for b in response.json()["data"]]))
+
 def get_entry_data(url, token, entry_id):
 
     row = {"entry_id": entry_id}
