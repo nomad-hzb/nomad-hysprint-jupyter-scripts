@@ -3,6 +3,16 @@ import numpy as np
 import pandas as pd
 import io
 
+
+def get_axes_from_extent(extent, data):
+    print("Start get axes from extent")
+    [xmin, xmax, ymin, ymax] = extent
+    nrwos, ncols = data.shape
+    xaxes = np.linspace(xmin, xmax, ncols)
+    yaxes = np.linspace(ymin, ymax, nrwos)
+    return xaxes, yaxes
+
+
 class PLDataLoader:
     """Class to handle loading and parsing of photoluminescence data files"""
     
@@ -175,3 +185,23 @@ class PLDataLoader:
             issues.append("Timestamps are not in ascending order")
             
         return issues
+
+    def load_h5_data(self, mode, h5_path):
+        print("Start of load_h5_data")
+        import h5py
+        with h5py.File(h5_path, "r") as f:
+            if mode == "pl_raw":
+                timestamps = f["/raw_optical_measurements/raw_pl_measurements/raw_pl_Time"][()]
+                data_matrix = f["/raw_optical_measurements/raw_pl_measurements/raw_pl_data"][()].T
+                wavelengths = f["/raw_optical_measurements/wavelengths_spectrometer/wavelengths_spectrometer_data"][
+                    ()]
+            if mode == "pl_binned":
+                extent = f["/binned_optical_measurements/time_extent_for_binning"][()]
+                data_matrix = f["/binned_optical_measurements/binned_pl_measurements_bg"][()]
+                timestamps, wavelengths = get_axes_from_extent(extent, data_matrix)
+            if mode == "giwaxs":
+                timestamps = f["/beamline_logging/Time"][()]
+                data_matrix = f["/diffractogram/i_values"][()].T
+                wavelengths = f["/diffractogram/q_values"][()][0]
+
+        return data_matrix, wavelengths, timestamps
