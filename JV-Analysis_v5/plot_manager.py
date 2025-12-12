@@ -57,7 +57,7 @@ def plotting_string_action(plot_list, data, supp, is_voila=False, color_scheme=N
 
     # Mapping dictionaries for plot codes
     varx_dict = {"a": "sample", "b": "cell", "c": "direction", "d": "ilum", "e": "batch", "g": "condition", "s": "status"}
-    vary_dict = {"v": "voc", "j": "jsc", "f": "ff", "p": "pce", "u": "vmpp", "i": "jmpp", "m": "pmpp", "r": "rser", "h": "rshu"}
+    vary_dict = {"v": "voc", "j": "jsc", "f": "ff", "p": "pce", "x": "vocxff", "u": "vmpp", "i": "jmpp", "m": "pmpp", "r": "rser", "h": "rshu"}
 
     fig_list = []
     fig_names = []
@@ -86,6 +86,8 @@ def plotting_string_action(plot_list, data, supp, is_voila=False, color_scheme=N
                 fig_list.extend(figs)
                 fig_names.extend(fig_names_combo)
                 continue
+            elif "CwH" in pl:
+                fig, fig_name = plot_manager.create_jv_best_device_plot(filtered_jv, filtered_curves, colors=color_scheme, show_summary=False)
             elif "Cxw" in pl:
                 # Create curves that match filtered JV data
                 working_curves = plot_manager._create_matching_curves_data(filtered_jv, complete_curves)
@@ -217,22 +219,21 @@ def plotting_string_action(plot_list, data, supp, is_voila=False, color_scheme=N
 
 def plot_list_from_voila(plot_list):
     """Convert plot selections from UI to plot codes"""
-    jvc_dict = {'Voc': 'v', 'Jsc': 'j', 'FF': 'f', 'PCE': 'p', 'R_ser': 'r', 'R_shu': 'h', 'V_mpp': 'u', 'J_mpp': 'i', 'P_mpp': 'm'}
+    jvc_dict = {'Voc': 'v', 'Jsc': 'j', 'FF': 'f', 'PCE': 'p', 'Voc x FF': 'x', 'R_ser': 'r', 'R_shu': 'h', 'V_mpp': 'u', 'J_mpp': 'i', 'P_mpp': 'm'}
     box_dict = {'by Batch': 'e', 'by Variable': 'g', 'by Sample': 'a', 'by Cell': 'b', 'by Scan Direction': 'c',
                 'by Status': 's', 'by Status and Variable': 'sg', 'by Direction and Variable': 'cg', 'by Cell and Variable': 'bg',
                 'by Direction, Status and Variable': 'csg'}
-
     cur_dict = {
         'All cells': 'Cy', 
         'Only working cells': 'Cz', 
         'Rejected cells': 'Co', 
-        'Best device only': 'Cw', 
+        'Best device only': 'Cw',
         'Separated by cell (all)': 'Cx',
         'Separated by cell (working only)': 'Cxw',
         'Separated by substrate (all)': 'Cd',
         'Separated by substrate (working only)': 'Cdw'
     }
-
+    
     new_list = []
     for plot in plot_list:
         code = ''
@@ -250,7 +251,14 @@ def plot_list_from_voila(plot_list):
             code += "H"
             code += jvc_dict.get(option1, '')
         elif "JV Curve" in plot_type:
-            code += cur_dict.get(option1, '')
+            # Handle JV summary option for Best device only
+            if option1 == 'Best device only':
+                if option2 == 'Hide JV summary':
+                    code = 'CwH'  # Best device with hidden summary
+                else:
+                    code = 'Cw'   # Best device with summary (default)
+            else:
+                code += cur_dict.get(option1, '')
         
         if code:
             new_list.append(code)
@@ -389,7 +397,7 @@ class PlotManager:
         
         return matching_curves
     
-    def create_jv_best_device_plot(self, jvc_data, curves_data, colors=None):
+    def create_jv_best_device_plot(self, jvc_data, curves_data, colors=None, show_summary=True):
         """Plot JV curves for the best device (highest PCE) with all available measurements"""
         
         voltage_rows = curves_data[curves_data["variable"] == "Voltage (V)"]
@@ -405,7 +413,7 @@ class PlotManager:
         # Get ALL measurements for this sample+cell combination (not just best measurement)
         best_device_jv = jvc_data[(jvc_data["sample"] == best_sample) & (jvc_data["cell"] == best_cell)]
         best_device_curves = curves_data[(curves_data["sample"] == best_sample) & (curves_data["cell"] == best_cell)]
-
+    
         all_matching_curves = curves_data[curves_data["sample"] == best_sample]
         
         if len(all_matching_curves) > 0:
@@ -414,7 +422,7 @@ class PlotManager:
         # Get ALL measurements for this sample+cell combination (not just best measurement)
         best_device_jv = jvc_data[(jvc_data["sample"] == best_sample) & (jvc_data["cell"] == best_cell)]
         best_device_curves = curves_data[(curves_data["sample"] == best_sample) & (curves_data["cell"] == best_cell)]
-
+    
         if not best_device_curves.empty:
             voltage_curves = best_device_curves[best_device_curves["variable"] == "Voltage (V)"]
             current_curves = best_device_curves[best_device_curves["variable"] == "Current Density(mA/cm2)"]
@@ -426,7 +434,7 @@ class PlotManager:
         # Organize curves by status, direction
         voltage_curves = best_device_curves[best_device_curves["variable"] == "Voltage (V)"]
         current_curves = best_device_curves[best_device_curves["variable"] == "Current Density(mA/cm2)"]
-
+    
         fig = go.Figure()
         
         # Add axis lines
@@ -435,7 +443,7 @@ class PlotManager:
         
         if colors is None:
             colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-
+    
         voltage_measurements = {}
         current_measurements = {}
         
@@ -452,7 +460,7 @@ class PlotManager:
                         data_values.append(val)
                 except (ValueError, TypeError):
                     continue
-
+    
             # Group by direction
             key = f"{direction}"
             
@@ -560,8 +568,85 @@ class PlotManager:
                         # legendgroup=f"measurement_{measurement_idx}",
                         showlegend=True
                     ))
+        
+        # Add MPP points and JV characteristics (from older version)
+        # Get JV characteristics values for Forward and Reverse
+        df_rev = best_device_jv[(best_device_jv["direction"] == "Reverse")]
+        df_for = best_device_jv[(best_device_jv["direction"] == "Forward")]
+        
+        if not df_rev.empty and not df_for.empty:
+            # Extract values
+            char_vals = ['Voc(V)', 'Jsc(mA/cm2)', 'FF(%)', 'PCE(%)']
+            char_rev = []
+            char_for = []
+            
+            for cv in char_vals:
+                if cv in df_rev.columns:
+                    char_rev.append(df_rev[cv].iloc[0])
+                else:
+                    char_rev.append(0)
+                if cv in df_for.columns:
+                    char_for.append(df_for[cv].iloc[0])
+                else:
+                    char_for.append(0)
+    
+            # Add MPP points if available
+            if 'V_mpp(V)' in df_for.columns and 'J_mpp(mA/cm2)' in df_for.columns:
+                v_f = df_for['V_mpp(V)'].iloc[0]
+                j_f = df_for['J_mpp(mA/cm2)'].iloc[0]
                 
-        # Update layout
+                fig.add_trace(go.Scatter(
+                    x=[v_f], y=[j_f],
+                    mode='markers',
+                    marker=dict(color='red', size=10),
+                    name='Forward MPP',
+                    hoverinfo='text',
+                    hovertext=f'MPP Forward<br>V: {v_f:.3f} V<br>J: {j_f:.3f} mA/cm²'
+                ))
+    
+            if 'V_mpp(V)' in df_rev.columns and 'J_mpp(mA/cm2)' in df_rev.columns:
+                v_r = df_rev['V_mpp(V)'].iloc[0]
+                j_r = df_rev['J_mpp(mA/cm2)'].iloc[0]
+                
+                fig.add_trace(go.Scatter(
+                    x=[v_r], y=[j_r],
+                    mode='markers',
+                    marker=dict(color='red', size=10, symbol='x'),
+                    name='Reverse MPP',
+                    hoverinfo='text',
+                    hovertext=f'MPP Reverse<br>V: {v_r:.3f} V<br>J: {j_r:.3f} mA/cm²'
+                ))
+    
+        if show_summary:
+            # Add JV information as annotations (initially visible)
+            text_rev = f"""Rev:
+        <br>Voc: {char_rev[0]:>5.2f}
+        <br>Jsc:  {char_rev[1]:>5.1f}
+        <br>FF:   {char_rev[2]:>5.1f}
+        <br>PCE: {char_rev[3]:>5.1f}"""
+            
+            text_for = f"For:<br>{char_for[0]:.2f} V<br>{char_for[1]:.1f} mA/cm²<br>{char_for[2]:.1f}%<br>{char_for[3]:.1f}%"
+        
+            # Add annotations for values
+            fig.add_annotation(
+                x=0.24, y=-5,
+                text=text_rev,
+                showarrow=False,
+                font=dict(size=12),
+                align="left",
+                name="summary_rev"
+            )
+            
+            fig.add_annotation(
+                x=0.55, y=-5,
+                text=text_for,
+                showarrow=False,
+                font=dict(size=12),
+                align="left",
+                name="summary_for"
+            )
+        
+        # Update layout with custom modebar
         fig.update_layout(
             title=f"JV Curves - Best Device ({best_sample} [Cell {best_cell}])",
             xaxis_title='Voltage [V]',
@@ -580,7 +665,7 @@ class PlotManager:
             showlegend=True,
             margin=dict(r=150)
         )
-        
+
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
         
@@ -591,8 +676,8 @@ class PlotManager:
         """Create a boxplot with statistical analysis - ENHANCED with data verification"""
         names_dict = {
             "voc": 'Voc(V)', "jsc": 'Jsc(mA/cm2)', "ff": 'FF(%)', "pce": 'PCE(%)',
-            "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', "pmpp": 'P_mpp(mW/cm2)',
-            "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
+            "vocxff": 'Voc x FF(V%)', "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', 
+            "pmpp": 'P_mpp(mW/cm2)', "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
         }
         var_name_y = names_dict[var_y]
         trash, filters = filtered_info
@@ -670,9 +755,12 @@ class PlotManager:
                     fillcolor=colors[i % len(colors)],
                     boxmean=True,
                     width=0.8,
+                    customdata=data[data[var_x] == category][['sample', 'cell']].values,
                     hovertemplate=(
                         f"<b>{category}</b><br>" +
                         "Value: %{y:.3f}<br>" +
+                        "Sample: %{customdata[0]}<br>" +
+                        "Cell: %{customdata[1]}<br>" +
                         f"Median: {median:.3f}<br>" +
                         f"Mean: {mean:.3f}<br>" +
                         f"Count: {data_count}"
@@ -850,8 +938,8 @@ class PlotManager:
         
         names_dict = {
             "voc": 'Voc(V)', "jsc": 'Jsc(mA/cm2)', "ff": 'FF(%)', "pce": 'PCE(%)',
-            "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', "pmpp": 'P_mpp(mW/cm2)',
-            "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
+            "vocxff": 'Voc x FF(V%)', "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', 
+            "pmpp": 'P_mpp(mW/cm2)', "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
         }
         var_name_y = names_dict[var_y]
         
@@ -1005,8 +1093,8 @@ class PlotManager:
         
         names_dict = {
             "voc": 'Voc(V)', "jsc": 'Jsc(mA/cm2)', "ff": 'FF(%)', "pce": 'PCE(%)',
-            "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', "pmpp": 'P_mpp(mW/cm2)',
-            "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
+            "vocxff": 'Voc x FF(V%)', "vmpp": 'V_mpp(V)', "jmpp": 'J_mpp(mA/cm2)', 
+            "pmpp": 'P_mpp(mW/cm2)', "rser": 'R_series(Ohmcm2)', "rshu": 'R_shunt(Ohmcm2)'
         }
         var_name_y = names_dict[var_y]
         

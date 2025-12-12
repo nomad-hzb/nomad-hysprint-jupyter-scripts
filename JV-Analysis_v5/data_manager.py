@@ -289,6 +289,10 @@ class DataManager:
             
             df_jvc = pd.DataFrame(rows_jvc, columns=columns_jvc)
             df_cur = pd.DataFrame(rows_cur, columns=columns_cur)
+
+            # Calculate Voc x FF if both columns exist
+            if 'Voc(V)' in df_jvc.columns and 'FF(%)' in df_jvc.columns:
+                df_jvc['Voc x FF(V%)'] = df_jvc['Voc(V)'] * df_jvc['FF(%)']
             
             return df_jvc, df_cur
             

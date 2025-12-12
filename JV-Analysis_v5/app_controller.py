@@ -623,6 +623,7 @@ If you tested specific variables or conditions for each sample, please write the
                 'Voc': 'Voc(V)', 
                 'Jsc': 'Jsc(mA/cm2)',
                 'FF': 'FF(%)',
+                'Voc x FF': 'Voc x FF(V%)',
                 'R_ser': 'R_series(Ohmcm2)',
                 'R_shu': 'R_shunt(Ohmcm2)',
                 'V_mpp': 'V_mpp(V)',

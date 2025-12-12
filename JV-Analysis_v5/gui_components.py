@@ -743,6 +743,15 @@ class PlotUI:
             #width='wide'
             width='100px'
         )
+        # Add observer for option1 changes to update option2
+        def update_option2(change):
+            if plot_type_dropdown.value == 'JV Curve' and change['new'] == 'Best device only':
+                option2_dropdown.options = ['Show JV summary', 'Hide JV summary']
+                option2_dropdown.value = 'Show JV summary'  # Default to show
+            elif plot_type_dropdown.value == 'JV Curve':
+                option2_dropdown.options = ['']
+        
+        option1_dropdown.observe(update_option2, names='value')
         
         # Update options based on plot type
         self._update_plot_options(plot_type_dropdown, option1_dropdown, option2_dropdown)
@@ -758,21 +767,26 @@ class PlotUI:
         plot_type = plot_type_dropdown.value
         
         if plot_type == 'Boxplot':
-            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
+            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'Voc x FF', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
             option2_dropdown.options = ['by Batch', 'by Variable', 'by Sample', 'by Cell', 'by Scan Direction',
                                        'by Status', 'by Status and Variable', 'by Direction and Variable', 'by Cell and Variable',
                                        'by Direction, Status and Variable']
         elif plot_type == 'Boxplot (omitted)':
-            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
+            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'Voc x FF', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
             option2_dropdown.options = ['by Batch', 'by Variable', 'by Sample', 'by Cell', 'by Scan Direction', 'by Status']
         elif plot_type == 'Histogram':
-            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
+            option1_dropdown.options = ['Voc', 'Jsc', 'FF', 'PCE', 'Voc x FF', 'R_ser', 'R_shu', 'V_mpp', 'J_mpp', 'P_mpp']
             option2_dropdown.options = ['']
         elif plot_type == 'JV Curve':
             option1_dropdown.options = ['All cells', 'Only working cells', 'Rejected cells', 
                                        'Best device only', 'Separated by cell (all)', 'Separated by cell (working only)', 
                                        'Separated by substrate (all)', 'Separated by substrate (working only)']
-            option2_dropdown.options = ['']
+            
+            # Set option2 based on option1 selection
+            if option1_dropdown.value == 'Best device only':
+                option2_dropdown.options = ['Show JV summary', 'Hide JV summary']
+            else:
+                option2_dropdown.options = ['']
         else:
             option1_dropdown.options = []
             option2_dropdown.options = []
@@ -804,7 +818,16 @@ class PlotUI:
                 new_group = self._create_plot_type_row()
                 new_group.children[0].value = plot_type
                 new_group.children[1].value = option1
-                new_group.children[2].value = option2
+                
+                # Handle option2 based on the new logic
+                if plot_type == 'JV Curve' and option1 == 'Best device only':
+                    # For Best device only, default to 'Show JV summary'
+                    new_group.children[2].value = 'Show JV summary'
+                elif option2 in new_group.children[2].options:
+                    # Only set if the option exists in the dropdown
+                    new_group.children[2].value = option2
+                # If option2 is not valid (like ''), leave it as default
+                
                 self.plot_type_groups.append(new_group)
         else:
             self.plot_type_groups.append(self._create_plot_type_row())
