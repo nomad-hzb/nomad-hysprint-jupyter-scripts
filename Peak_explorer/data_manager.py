@@ -75,7 +75,7 @@ def get_h5_path_from_ipython():
 # =============================================================================
 
 class CSVDataLoader:
-    """Class to handle loading and parsing of photoluminescence data files"""
+    """Class to handle loading and parsing of data files"""
 
     def __init__(self):
         self.data_matrix = None
@@ -540,7 +540,7 @@ class DataManager:
         if unit not in ['nm', 'angstrom']:
             debug_print(f"Invalid unit: {unit}", "DATA")
             return False
-    
+        
         debug_print(f"Setting wavelength unit label to {unit}", "DATA")
         return True
 
@@ -571,7 +571,53 @@ class DataManager:
         debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} eV", "DATA")
         
         return True
-    
+
+    def convert_wavelengths_to_angstrom(self):
+        """
+        Convert wavelength axis from nm to Angstrom
+        1 nm = 10 Angstrom
+        
+        Returns:
+        --------
+        bool: True if conversion successful
+        """
+        if not self.is_data_loaded():
+            debug_print("Cannot convert: no data loaded", "DATA")
+            return False
+        
+        debug_print(f"Converting wavelengths from nm to Angstrom", "DATA")
+        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
+        
+        # Convert nm to Angstrom (multiply by 10)
+        self.wavelengths = self.wavelengths * 10
+        
+        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} Å", "DATA")
+        
+        return True
+
+    def convert_wavelengths_to_nm(self):
+        """
+        Convert wavelength axis from Angstrom back to nm
+        1 nm = 10 Angstrom
+        
+        Returns:
+        --------
+        bool: True if conversion successful
+        """
+        if not self.is_data_loaded():
+            debug_print("Cannot convert: no data loaded", "DATA")
+            return False
+        
+        debug_print(f"Converting wavelengths from Angstrom to nm", "DATA")
+        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} Å", "DATA")
+        
+        # Convert Angstrom to nm (divide by 10)
+        self.wavelengths = self.wavelengths / 10
+        
+        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
+        
+        return True
+        
     def convert_energy_to_wavelength(self):
         """
         Convert energy (eV) to wavelength (nm)

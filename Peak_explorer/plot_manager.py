@@ -70,7 +70,7 @@ class Plotter:
         # Update layout for better visibility
         fig.update_layout(
             title=dict(
-                text="Photoluminescence Heatmap",
+                text="Peak Analysis Heatmap",
                 font=dict(size=16, family="Arial", color="darkblue")
             ),
             xaxis_title="Time (s)",
@@ -121,7 +121,7 @@ class Plotter:
                 rows=2, cols=1,
                 shared_xaxes=True,
                 vertical_spacing=0.05,
-                subplot_titles=('Photoluminescence Spectrum', 'Residuals'),
+                subplot_titles=('Peak Analysis', 'Residuals'),
                 row_heights=[0.75, 0.25]
             )
             # Main spectrum plot
@@ -208,7 +208,7 @@ class Plotter:
             ))
             
             fig.update_layout(
-                title="Photoluminescence Spectrum",
+                title="Peak Analysis",
                 xaxis_title=f"Wavelength ({wavelength_unit})" if wavelength_unit == 'nm' else f"Energy ({wavelength_unit})" if wavelength_unit == 'eV' else f"q ({wavelength_unit})",
                 yaxis_title="Intensity",
                 height=config.SPECTRUM_HEIGHT,

@@ -32,7 +32,7 @@ class GUIComponents:
             self.widgets['file_upload'] = widgets.FileUpload(
                 accept=config.ACCEPTED_FILE_TYPES,
                 multiple=config.ACCEPT_MULTIPLE_FILES,
-                description='Upload PL Data'
+                description='Upload Data'
             )
             debug_print("Created file upload widget", "GUI")
         

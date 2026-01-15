@@ -259,7 +259,7 @@ class GUILayouts:
     def create_main_layout(self):
         """Create complete main layout"""
         # Header
-        header = widgets.HTML("<h1>🔬 Photoluminescence Analysis App</h1>")
+        header = widgets.HTML("<h1>🔬 Peak Analysis App</h1>")
         
         # Main content (control panel + visualization)
         main_content = widgets.HBox([
@@ -852,7 +852,7 @@ class PLAnalysisApp:
         self.update_peak_list_container()
 
     def on_toggle_angstrom(self, button):
-        """Toggle wavelength unit label between nm and Angstrom (TEST BUTTON ONLY)"""
+        """Toggle wavelength unit between nm and Angstrom with data conversion"""
         if not self.data_manager.is_data_loaded():
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
@@ -860,46 +860,82 @@ class PLAnalysisApp:
             return
         
         try:
-            debug_print(f"Toggling unit label from {self.wavelength_unit}", "APP")
+            debug_print(f"Converting from {self.wavelength_unit}", "APP")
             
-            # Toggle the unit label (don't change data values)
             if self.wavelength_unit == 'nm':
-                self.wavelength_unit = 'angstrom'
-                self.widgets['unit_display'].value = "Unit: Å"
-                with self.widgets['status_output']:
-                    self.widgets['status_output'].clear_output()
-                    print(f"✅ Unit label changed to Angstrom (Å)")
-                    print("⚠️ TEST BUTTON - Only changes axis labels")
+                # Convert to Angstrom
+                success = self.data_manager.convert_wavelengths_to_angstrom()
+                if success:
+                    self.wavelength_unit = 'angstrom'
+                    self.widgets['unit_display'].value = "Unit: Å"
+                    
+                    # Update wavelength range slider
+                    wl_min = float(self.data_manager.wavelengths.min())
+                    wl_max = float(self.data_manager.wavelengths.max())
+                    current_range = self.widgets['wavelength_range_slider'].value
+                    
+                    # Convert current range to Angstrom
+                    new_range = (current_range[0] * 10, current_range[1] * 10)
+                    
+                    # Update in correct order to avoid min > max errors
+                    self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
+                    self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
+                    self.widgets['wavelength_range_slider'].value = new_range
+                    self.widgets['wavelength_range_slider'].min = wl_min
+                    self.widgets['wavelength_range_slider'].max = wl_max
+                    
+                    with self.widgets['status_output']:
+                        self.widgets['status_output'].clear_output()
+                        print(f"✅ Converted to Angstrom (Å)")
+                        print(f"   Range: {wl_min:.1f} - {wl_max:.1f} Å")
+                        
             elif self.wavelength_unit == 'angstrom':
-                self.wavelength_unit = 'nm'
-                self.widgets['unit_display'].value = "Unit: nm"
-                with self.widgets['status_output']:
-                    self.widgets['status_output'].clear_output()
-                    print(f"✅ Unit label changed to nanometers (nm)")
-                    print("⚠️ TEST BUTTON - Only changes axis labels")
+                # Convert to nm
+                success = self.data_manager.convert_wavelengths_to_nm()
+                if success:
+                    self.wavelength_unit = 'nm'
+                    self.widgets['unit_display'].value = "Unit: nm"
+                    
+                    # Update wavelength range slider
+                    wl_min = float(self.data_manager.wavelengths.min())
+                    wl_max = float(self.data_manager.wavelengths.max())
+                    current_range = self.widgets['wavelength_range_slider'].value
+                    
+                    # Convert current range to nm
+                    new_range = (current_range[0] / 10, current_range[1] / 10)
+                    
+                    # Update in correct order to avoid min > max errors
+                    self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
+                    self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
+                    self.widgets['wavelength_range_slider'].value = new_range
+                    self.widgets['wavelength_range_slider'].min = wl_min
+                    self.widgets['wavelength_range_slider'].max = wl_max
+                    
+                    with self.widgets['status_output']:
+                        self.widgets['status_output'].clear_output()
+                        print(f"✅ Converted to nanometers (nm)")
+                        print(f"   Range: {wl_min:.1f} - {wl_max:.1f} nm")
             else:
                 # If currently in eV, go back to nm
                 self.wavelength_unit = 'nm'
                 self.widgets['unit_display'].value = "Unit: nm"
                 with self.widgets['status_output']:
                     self.widgets['status_output'].clear_output()
-                    print(f"✅ Unit label changed to nanometers (nm)")
+                    print(f"✅ Changed to nanometers (nm)")
             
-            # NOW update visualizations with the new unit
-            print(f"DEBUG: About to update visualizations with wavelength_unit={self.wavelength_unit}")
+            # Update all visualizations with new data
             self.update_visualizations(update_heatmap=True)
-            print(f"DEBUG: Finished updating visualizations")
             
-            debug_print(f"Unit label changed to: {self.wavelength_unit}", "APP")
+            debug_print(f"Conversion complete. New unit: {self.wavelength_unit}", "APP")
             
         except Exception as e:
             import traceback
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
-                print(f"❌ Error changing unit label: {str(e)}")
+                print(f"❌ Error converting units: {str(e)}")
                 print("\n🔍 Full traceback:")
                 print(traceback.format_exc())
-            debug_print(f"Error in unit label change: {e}", "APP")
+            debug_print(f"Error in unit conversion: {e}", "APP")
 
     def on_convert_energy(self, button):
         """Convert between wavelength (nm) and energy (eV)"""
