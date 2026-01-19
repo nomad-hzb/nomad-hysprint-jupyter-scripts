@@ -440,7 +440,8 @@ class FittingModels:
                                                     max=peak_info['center']+50)
                 peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), 
                                                        min=0)
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=1, max=100)
+                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
+                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
                 
             elif peak_type == 'Lorentzian':
                 peak_model = LorentzianModel(prefix=prefix)
@@ -450,7 +451,8 @@ class FittingModels:
                                                     max=peak_info['center']+50)
                 peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, 
                                                        min=0)
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=1, max=100)
+                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
+                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
                 
             elif peak_type == 'Voigt':
                 peak_model = VoigtModel(prefix=prefix)
@@ -460,8 +462,8 @@ class FittingModels:
                                                     max=peak_info['center']+50)
                 peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), 
                                                        min=0)
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=1, max=100)
-                peak_params[f'{prefix}gamma'].set(value=peak_info['sigma'], min=0.1, max=100)
+                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
+                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
             
             else:
                 raise ValueError(f"Unknown peak type: {peak_type}")

@@ -1055,8 +1055,42 @@ class PLAnalysisApp:
             
             # Add parameters based on model type
             if model_type == 'Linear':
-                peak_params['slope'] = peak_model._widgets['slope'].value
-                peak_params['intercept'] = peak_model._widgets['intercept'].value
+                slope = peak_model._widgets['slope'].value
+                intercept = peak_model._widgets['intercept'].value
+                
+                # Auto-initialize if values are at defaults (0, 0)
+                if slope == 0.0 and intercept == 0.0 and self.data_manager.is_data_loaded():
+                    # Get current spectrum for initialization
+                    spectrum = self.data_manager.get_current_spectrum()
+                    wavelengths = self.data_manager.wavelengths
+                    
+                    # Estimate linear baseline from first and last points
+                    # Use first 10% and last 10% of data to avoid peaks
+                    n_points = len(spectrum)
+                    start_idx = int(n_points * 0.05)
+                    end_idx = int(n_points * 0.95)
+                    
+                    y_start = np.median(spectrum[:start_idx]) if start_idx > 0 else spectrum[0]
+                    y_end = np.median(spectrum[end_idx:]) if end_idx < n_points else spectrum[-1]
+                    x_start = wavelengths[start_idx] if start_idx < n_points else wavelengths[0]
+                    x_end = wavelengths[end_idx] if end_idx < n_points else wavelengths[-1]
+                    
+                    # Calculate slope and intercept
+                    if x_end != x_start:
+                        slope = (y_end - y_start) / (x_end - x_start)
+                        intercept = y_start - slope * x_start
+                    else:
+                        slope = 0.0
+                        intercept = np.median(spectrum)
+                    
+                    debug_print(f"Auto-initialized Linear model: slope={slope:.3f}, intercept={intercept:.3f}", "APP")
+                    
+                    # Update the widgets so user can see the values
+                    peak_model._widgets['slope'].value = float(slope)
+                    peak_model._widgets['intercept'].value = float(intercept)
+                
+                peak_params['slope'] = slope
+                peak_params['intercept'] = intercept
                 
             elif model_type == 'Polynomial':
                 peak_params['poly_degree'] = peak_model._widgets['poly_degree'].value
