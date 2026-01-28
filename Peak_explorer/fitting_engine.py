@@ -369,7 +369,9 @@ class FittingModels:
         self.available_peak_models = {
             'Gaussian': GaussianModel,
             'Voigt': VoigtModel,
-            'Lorentzian': LorentzianModel
+            'Lorentzian': LorentzianModel,
+            'Linear': LinearModel,
+            'Polynomial': PolynomialModel
         }
         
         self.available_background_models = {
@@ -408,75 +410,62 @@ class FittingModels:
                 
             model = bg_model
             params.update(bg_model.make_params())
-        
-        # Add peak/component models
+            
+        # Add peak models
+        # Add peak models
         for i, peak_info in enumerate(fit_params['peak_models']):
             peak_type = peak_info['type']
-            prefix = f'p{i}_'
             
-            debug_print(f"Creating model {i}: type={peak_type}", "FITTING")
-            
-            if peak_type == 'Linear':
-                # Linear model: y = slope * x + intercept
-                peak_model = LinearModel(prefix=prefix)
-                peak_params = peak_model.make_params()
-                peak_params[f'{prefix}slope'].set(value=peak_info.get('slope', 0.0))
-                peak_params[f'{prefix}intercept'].set(value=peak_info.get('intercept', 0.0))
-                
-            elif peak_type == 'Polynomial':
-                # Polynomial model
+            # Special handling for Polynomial which needs degree parameter
+            if peak_type == 'Polynomial':
                 degree = peak_info.get('poly_degree', 2)
-                peak_model = PolynomialModel(degree=degree, prefix=prefix)
-                peak_params = peak_model.make_params()
-                # Initialize all coefficients to 0, let fitting determine them
-                for j in range(degree + 1):
-                    peak_params[f'{prefix}c{j}'].set(value=0.0)
-                
-            elif peak_type == 'Gaussian':
-                peak_model = GaussianModel(prefix=prefix)
-                peak_params = peak_model.make_params()
-                peak_params[f'{prefix}center'].set(value=peak_info['center'], 
-                                                    min=peak_info['center']-50, 
-                                                    max=peak_info['center']+50)
-                peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), 
-                                                       min=0)
-                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
-                
-            elif peak_type == 'Lorentzian':
-                peak_model = LorentzianModel(prefix=prefix)
-                peak_params = peak_model.make_params()
-                peak_params[f'{prefix}center'].set(value=peak_info['center'], 
-                                                    min=peak_info['center']-50, 
-                                                    max=peak_info['center']+50)
-                peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, 
-                                                       min=0)
-                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
-                
-            elif peak_type == 'Voigt':
-                peak_model = VoigtModel(prefix=prefix)
-                peak_params = peak_model.make_params()
-                peak_params[f'{prefix}center'].set(value=peak_info['center'], 
-                                                    min=peak_info['center']-50, 
-                                                    max=peak_info['center']+50)
-                peak_params[f'{prefix}amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), 
-                                                       min=0)
-                min_sigma = max(0.01, peak_info['sigma'] * 0.5)  # At least 0.01 or half the detected value
-                peak_params[f'{prefix}sigma'].set(value=peak_info['sigma'], min=min_sigma, max=100)
-            
+                peak_model = PolynomialModel(degree=degree, prefix=f'p{i}_')
             else:
-                raise ValueError(f"Unknown peak type: {peak_type}")
+                peak_model_class = self.available_peak_models[peak_type]
+                peak_model = peak_model_class(prefix=f'p{i}_')
             
-            # Combine models
             if model is None:
                 model = peak_model
             else:
                 model = model + peak_model
                 
+            # Set initial parameters
+            peak_params = peak_model.make_params()
+            
+            # Set initial values based on UI input
+            if peak_info['type'] == 'Gaussian':
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+            elif peak_info['type'] == 'Polynomial':
+                # Polynomial - use fitted coefficients if available
+                degree = peak_info.get('poly_degree', 2)
+                fitted_coeffs = peak_info.get('fitted_coeffs', None)
+                
+                if fitted_coeffs and len(fitted_coeffs) >= degree + 1:
+                    # Use previously fitted coefficients
+                    for j in range(degree + 1):
+                        peak_params[f'p{i}_c{j}'].set(value=fitted_coeffs[j])
+                else:
+                    # Start from zero and let fitter find values
+                    for j in range(degree + 1):
+                        peak_params[f'p{i}_c{j}'].set(value=0.0, min=-1000, max=1000)
+            elif peak_info['type'] == 'Linear':
+                # Linear - initialize slope and intercept
+                peak_params[f'p{i}_slope'].set(value=0.0)
+                peak_params[f'p{i}_intercept'].set(value=0.0)
+            elif peak_info['type'] == 'Lorentzian':
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, min=0)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+            elif peak_info['type'] == 'Voigt':
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_gamma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                
             params.update(peak_params)
-        
-        debug_print(f"Composite model created with {len(params)} parameters", "FITTING")
+            
         return model, params
         
     def fit_spectrum(self, wavelengths, intensities, fit_params):
@@ -507,7 +496,7 @@ class FittingModels:
         
         return result
         
-    def fit_all_spectra(self, wavelengths, data_matrix, timestamps, fit_params, max_workers=None, use_smart_init=True):
+    def fit_all_spectra(self, wavelengths, data_matrix, timestamps, fit_params, max_workers=None, use_smart_init=True, progress_callback=None):
         """
         Fit all spectra using parallel processing with smart parameter initialization
         
@@ -555,7 +544,7 @@ class FittingModels:
             }
             
             # Collect results with progress bar and smart updates
-            for future in tqdm(as_completed(future_to_idx), total=len(fit_args), desc="Fitting spectra"):
+            for future in as_completed(future_to_idx):
                 idx = future_to_idx[future]
                 try:
                     result = future.result()
@@ -566,11 +555,18 @@ class FittingModels:
                         self.previous_results[idx] = result
                         
                     completed_count += 1
+                    
+                    # Call progress callback if provided
+                    if progress_callback:
+                        progress_callback(completed_count, len(fit_args))
                         
                 except Exception as e:
                     print(f"Error fitting spectrum {idx}: {e}")
                     results[idx] = None
                     completed_count += 1
+                    
+                    if progress_callback:
+                        progress_callback(completed_count, len(fit_args))
                     
         return results
         
@@ -892,7 +888,7 @@ class FittingEngine:
         return result
     
     def fit_all_spectra(self, wavelengths, data_matrix, timestamps, 
-                       fit_range=None, max_workers=None, use_smart_init=None):
+                   fit_range=None, max_workers=None, use_smart_init=None, progress_callback=None):
         """
         Fit all spectra in batch
         
@@ -944,7 +940,8 @@ class FittingEngine:
             time_subset,
             self.fit_params,
             max_workers=max_workers,
-            use_smart_init=use_smart_init
+            use_smart_init=use_smart_init,
+            progress_callback=progress_callback
         )
         
         # Store results (offset indices if fitting a range)

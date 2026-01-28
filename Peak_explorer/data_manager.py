@@ -6,8 +6,19 @@ Contains all data loading, parsing, and management functionality
 import numpy as np
 import pandas as pd
 import io
+import os
+import sys
 import config
 from utils import debug_print
+
+parent_dir = os.path.dirname(os.getcwd())
+utils_dir = os.path.join(parent_dir, 'utils')
+if utils_dir not in sys.path:
+    sys.path.insert(0, utils_dir)
+import access_token
+
+# Log notebook usage
+access_token.log_notebook_usage()
 
 
 # =============================================================================

@@ -85,37 +85,64 @@ class GUIComponents:
         
         debug_print("Created time control widgets", "GUI")
         return self.widgets
+
+    def create_colorbar_widgets(self):
+        """Create colorbar range control widgets"""
+        # Range slider for intensity
+        self.widgets['colorbar_range_slider'] = widgets.FloatRangeSlider(
+            value=[0.0, 1000.0],
+            min=0.0,
+            max=10000.0,
+            step=0.1,
+            description='Range:',
+            orientation='horizontal',
+            readout=True,
+            readout_format='.1f',
+            layout=widgets.Layout(width='350px'),
+            disabled=True
+        )
+        
+        # Apply button
+        self.widgets['colorbar_apply_btn'] = widgets.Button(
+            description='Apply',
+            button_style='primary',
+            tooltip='Apply colorbar range',
+            layout=widgets.Layout(width='80px'),
+            disabled=True
+        )
+        
+        debug_print("Created colorbar widgets", "GUI")
+        return self.widgets
     
     def create_peak_detection_widgets(self):
         """Create peak detection widgets"""
-        # Auto-detect button
         self.widgets['auto_detect_btn'] = widgets.Button(
             description='🔍 Auto-Detect Peaks',
-            button_style='info',
+            button_style='primary',
             tooltip='Automatically detect peaks in current spectrum',
             layout=widgets.Layout(width='180px')
         )
         
-        # Detection parameters
+        # Detection parameters in 2-row layout
         self.widgets['peak_height_threshold'] = widgets.FloatText(
-            value=0.0,
-            description='Min Height:',
-            style={'description_width': '80px'},
-            layout=widgets.Layout(width='160px')
+            value=0,
+            description='',
+            disabled=True,
+            layout=widgets.Layout(width='100px')
         )
         
         self.widgets['peak_prominence'] = widgets.FloatText(
-            value=0.0,
-            description='Min Prom:',
-            style={'description_width': '80px'},
-            layout=widgets.Layout(width='160px')
+            value=0,
+            description='',
+            disabled=True,
+            layout=widgets.Layout(width='100px')
         )
         
         self.widgets['peak_distance'] = widgets.IntText(
             value=5,
-            description='Min Dist:',
-            style={'description_width': '80px'},
-            layout=widgets.Layout(width='160px')
+            description='',
+            disabled=True,
+            layout=widgets.Layout(width='100px')
         )
         
         debug_print("Created peak detection widgets", "GUI")
@@ -154,7 +181,7 @@ class GUIComponents:
             max=100,
             description='Start Index:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_manual_num'] = widgets.BoundedIntText(
@@ -163,9 +190,9 @@ class GUIComponents:
             max=50,
             description='# Curves:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
+            layout=widgets.Layout(width='180px')
         )
-
+    
         self.widgets['bg_manual_description'] = widgets.HTML(
             value="<i>Select starting time index and number of curves to average and subtract from all spectra</i>",
             layout=widgets.Layout(width='380px', margin='5px 0px 10px 0px')
@@ -176,128 +203,14 @@ class GUIComponents:
             value=0.0,
             description='Slope:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_linear_intercept'] = widgets.FloatText(
             value=0.0,
             description='Intercept:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        # Polynomial method widgets
-        self.widgets['bg_poly_degree'] = widgets.IntText(
-            value=config.DEFAULT_POLY_DEGREE,
-            description='Degree:',
-            min=1,
-            max=10,
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        self.widgets['bg_poly_coeffs'] = widgets.Textarea(
-            value='',
-            description='Coefficients:',
-            placeholder='Will show after auto-fit',
-            disabled=True,
-            layout=widgets.Layout(width='350px', height='60px', visibility='none')
-        )
-        
-        # Exponential method widgets
-        self.widgets['bg_exp_amplitude'] = widgets.FloatText(
-            value=1000.0,
-            description='Amplitude:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        self.widgets['bg_exp_decay'] = widgets.FloatText(
-            value=0.001,
-            description='Decay:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        self.widgets['bg_exp_offset'] = widgets.FloatText(
-            value=0.0,
-            description='Offset:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        # Action buttons
-        self.widgets['bg_autofit_btn'] = widgets.Button(
-            description='Auto-Fit Background',
-            button_style='info',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='none')
-        )
-        
-        self.widgets['bg_apply_btn'] = widgets.Button(
-            description='Apply Background',
-            button_style='warning',
-            disabled=True,
             layout=widgets.Layout(width='180px')
-        )
-        
-        self.widgets['bg_remove_btn'] = widgets.Button(
-            description='Remove Background',
-            button_style='danger',
-            disabled=True,
-            layout=widgets.Layout(width='180px')
-        )
-        
-        debug_print("Created background handling widgets", "GUI")
-        return self.widgets
-
-    def create_background_handling_widgets(self):
-        """Create unified background handling widgets"""
-        # Main dropdown
-        self.widgets['background_method'] = widgets.Dropdown(
-            options=config.BACKGROUND_OPTIONS,
-            value=config.DEFAULT_BACKGROUND_METHOD,
-            description='Method:',
-            style={'description_width': 'initial'}
-        )
-        
-        # Manual method widgets
-        self.widgets['bg_manual_start'] = widgets.BoundedIntText(
-            value=config.DEFAULT_BACKGROUND_START_IDX,
-            min=0,
-            max=100,
-            description='Start Index:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
-        )
-        
-        self.widgets['bg_manual_num'] = widgets.BoundedIntText(
-            value=config.DEFAULT_BACKGROUND_NUM_CURVES,
-            min=1,
-            max=50,
-            description='# Curves:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
-        )
-
-        self.widgets['bg_manual_description'] = widgets.HTML(
-            value="<i>Select starting time index and number of curves to average and subtract from all spectra</i>",
-            layout=widgets.Layout(width='380px', margin='5px 0px 10px 0px', visibility='hidden')
-        )
-        
-        # Linear method widgets
-        self.widgets['bg_linear_slope'] = widgets.FloatText(
-            value=0.0,
-            description='Slope:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
-        )
-        
-        self.widgets['bg_linear_intercept'] = widgets.FloatText(
-            value=0.0,
-            description='Intercept:',
-            disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
         )
         
         # Polynomial method widgets
@@ -307,7 +220,7 @@ class GUIComponents:
             max=10,
             description='Degree:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_poly_coeffs'] = widgets.Textarea(
@@ -315,7 +228,7 @@ class GUIComponents:
             description='Coefficients:',
             placeholder='Will show after auto-fit',
             disabled=True,
-            layout=widgets.Layout(width='350px', height='60px', visibility='hidden')
+            layout=widgets.Layout(width='350px', height='60px')
         )
         
         # Exponential method widgets
@@ -323,27 +236,27 @@ class GUIComponents:
             value=1000.0,
             description='Amplitude:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_exp_decay'] = widgets.FloatText(
             value=0.001,
             description='Decay:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_exp_offset'] = widgets.FloatText(
             value=0.0,
             description='Offset:',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
+            layout=widgets.Layout(width='180px')
         )
         
         # Custom background widgets
         self.widgets['bg_custom_description'] = widgets.HTML(
             value="<i>Upload a 2-column file (wavelength, intensity) to use as background</i>",
-            layout=widgets.Layout(width='380px', margin='5px 0px 10px 0px', visibility='hidden')
+            layout=widgets.Layout(width='380px', margin='5px 0px 10px 0px')
         )
         
         self.widgets['bg_custom_upload'] = widgets.FileUpload(
@@ -351,13 +264,13 @@ class GUIComponents:
             multiple=False,
             description='Upload BG:',
             disabled=True,
-            layout=widgets.Layout(width='380px', visibility='hidden'),
+            layout=widgets.Layout(width='380px'),
             style={'description_width': '80px'}
         )
         
         self.widgets['bg_custom_status'] = widgets.HTML(
             value="",
-            layout=widgets.Layout(width='380px', visibility='hidden')
+            layout=widgets.Layout(width='380px')
         )
         
         # Action buttons
@@ -365,7 +278,7 @@ class GUIComponents:
             description='Auto-Fit Background',
             button_style='info',
             disabled=True,
-            layout=widgets.Layout(width='180px', visibility='hidden')
+            layout=widgets.Layout(width='180px')
         )
         
         self.widgets['bg_apply_btn'] = widgets.Button(
@@ -463,6 +376,17 @@ class GUIComponents:
             layout=widgets.Layout(width='140px')
         )
         
+        # Progress bar
+        self.widgets['fit_progress'] = widgets.IntProgress(
+            value=0,
+            min=0,
+            max=100,
+            description='Progress:',
+            bar_style='info',
+            orientation='horizontal',
+            layout=widgets.Layout(width='350px', visibility='hidden')
+        )
+        
         debug_print("Created batch fitting widgets", "GUI")
         return self.widgets
     
@@ -501,14 +425,15 @@ class GUIComponents:
         self.create_batch_fitting_widgets()
         self.create_export_widgets()
         self.create_output_widgets()
-        self.create_unit_conversion_widgets()  # Add this line
+        self.create_unit_conversion_widgets()
+        self.create_colorbar_widgets()
         
         debug_print("Created all GUI widgets", "GUI")
         return self.widgets
     
     def create_peak_row_widget(self, peak_idx, peak_info):
         """
-        Create a widget row for a single peak/model
+        Create a widget row for a single peak/model with 2-row layout
         
         Parameters:
         -----------
@@ -521,63 +446,12 @@ class GUIComponents:
         --------
         widgets.VBox: Peak row widget
         """
-        # Peak type dropdown - includes Linear and Polynomial
+        # Peak type dropdown
         peak_type = widgets.Dropdown(
             options=['Gaussian', 'Voigt', 'Lorentzian', 'Linear', 'Polynomial'],
             value=peak_info.get('type', config.DEFAULT_PEAK_MODEL),
-            description='Type:',
-            style={'description_width': '40px'},
-            layout=widgets.Layout(width='140px')
-        )
-        
-        # Center position (hidden for Linear/Polynomial)
-        center_input = widgets.FloatText(
-            value=peak_info.get('center', 700),
-            description='Center:',
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px')
-        )
-        
-        # Height/Amplitude (changes meaning based on type)
-        height_input = widgets.FloatText(
-            value=peak_info.get('height', 1000),
-            description='Height:',
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px')
-        )
-        
-        # Sigma (width) - hidden for Linear/Polynomial
-        sigma_input = widgets.FloatText(
-            value=peak_info.get('sigma', 10),
-            description='Sigma:',
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px')
-        )
-        
-        # Linear-specific: Slope
-        slope_input = widgets.FloatText(
-            value=peak_info.get('slope', 0.0),
-            description='Slope:',
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px', visibility='hidden')
-        )
-        
-        # Linear-specific: Intercept
-        intercept_input = widgets.FloatText(
-            value=peak_info.get('intercept', 0.0),
-            description='Y-inter:',
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px', visibility='hidden')
-        )
-        
-        # Polynomial-specific: Degree
-        poly_degree_input = widgets.IntText(
-            value=peak_info.get('poly_degree', 2),
-            description='Degree:',
-            min=1,
-            max=5,
-            style={'description_width': '50px'},
-            layout=widgets.Layout(width='140px', visibility='hidden')
+            description='',
+            layout=widgets.Layout(width='120px')
         )
         
         # Remove button
@@ -588,76 +462,116 @@ class GUIComponents:
             layout=widgets.Layout(width='40px')
         )
         
-        # Callback to show/hide widgets based on peak type
+        # For Gaussian/Lorentzian/Voigt
+        label_center = widgets.Label('Center:', layout=widgets.Layout(width='100px'))
+        label_height = widgets.Label('Height:', layout=widgets.Layout(width='100px'))
+        label_sigma = widgets.Label('Sigma:', layout=widgets.Layout(width='100px'))
+        
+        center_input = widgets.FloatText(
+            value=peak_info.get('center', 700),
+            description='',
+            step=0.001,
+            layout=widgets.Layout(width='100px')
+        )
+        height_input = widgets.FloatText(
+            value=peak_info.get('height', 1000),
+            description='',
+            step=0.001,
+            layout=widgets.Layout(width='100px')
+        )
+        sigma_input = widgets.FloatText(
+            value=peak_info.get('sigma', 10),
+            description='',
+            step=0.001,
+            layout=widgets.Layout(width='100px')
+        )
+        
+        fix_center_cb = widgets.Checkbox(value=False, description='Fix', indent=False, layout=widgets.Layout(width='100px'))
+        fix_height_cb = widgets.Checkbox(value=False, description='Fix', indent=False, layout=widgets.Layout(width='100px'))
+        fix_sigma_cb = widgets.Checkbox(value=False, description='Fix', indent=False, layout=widgets.Layout(width='100px'))
+        
+        peak_labels = widgets.HBox([label_center, label_height, label_sigma])
+        peak_values = widgets.HBox([center_input, height_input, sigma_input])
+        peak_fixes = widgets.HBox([fix_center_cb, fix_height_cb, fix_sigma_cb])
+        
+        peak_params = widgets.VBox([peak_labels, peak_values, peak_fixes])
+        
+        # For Linear
+        label_slope = widgets.Label('Slope:', layout=widgets.Layout(width='120px'))
+        label_intercept = widgets.Label('Intercept:', layout=widgets.Layout(width='120px'))
+        
+        slope_input = widgets.FloatText(value=0.0, description='', step=0.001, layout=widgets.Layout(width='120px'))
+        intercept_input = widgets.FloatText(value=0.0, description='', step=0.001, layout=widgets.Layout(width='120px'))
+        
+        linear_labels = widgets.HBox([label_slope, label_intercept])
+        linear_values = widgets.HBox([slope_input, intercept_input])
+        linear_params = widgets.VBox([linear_labels, linear_values])
+        
+        # For Polynomial
+        label_degree = widgets.Label('Degree:', layout=widgets.Layout(width='100px'))
+        poly_degree_input = widgets.IntText(value=2, min=1, max=5, description='', layout=widgets.Layout(width='100px'))
+        
+        poly_labels = widgets.HBox([label_degree])
+        poly_values = widgets.HBox([poly_degree_input])
+        poly_params = widgets.VBox([poly_labels, poly_values])
+        
+        # Combine all parameter sets in a way that they overlay
+        # Only one will be visible at a time
+        params_area = widgets.VBox([peak_params, linear_params, poly_params], layout=widgets.Layout(
+            min_height='100px'  # Fixed height to prevent jumping
+        ))
+        
+        # Callback to switch between parameter sets
         def on_peak_type_change(change):
             peak_type_val = change['new']
             debug_print(f"Peak {peak_idx} type changed to {peak_type_val}", "GUI")
             
+            # Hide all
+            peak_params.layout.visibility = 'hidden'
+            peak_params.layout.display = 'none'
+            linear_params.layout.visibility = 'hidden'
+            linear_params.layout.display = 'none'
+            poly_params.layout.visibility = 'hidden'
+            poly_params.layout.display = 'none'
+            
+            # Show only the relevant one
             if peak_type_val == 'Linear':
-                # Show: slope, intercept
-                # Hide: center, height, sigma, poly_degree
-                center_input.layout.visibility = 'hidden'
-                height_input.layout.visibility = 'hidden'
-                sigma_input.layout.visibility = 'hidden'
-                slope_input.layout.visibility = 'visible'
-                intercept_input.layout.visibility = 'visible'
-                poly_degree_input.layout.visibility = 'hidden'
-                
+                linear_params.layout.visibility = 'visible'
+                linear_params.layout.display = 'flex'
             elif peak_type_val == 'Polynomial':
-                # Show: poly_degree
-                # Hide: center, height, sigma, slope, intercept
-                center_input.layout.visibility = 'hidden'
-                height_input.layout.visibility = 'hidden'
-                sigma_input.layout.visibility = 'hidden'
-                slope_input.layout.visibility = 'hidden'
-                intercept_input.layout.visibility = 'hidden'
-                poly_degree_input.layout.visibility = 'visible'
-                
+                poly_params.layout.visibility = 'visible'
+                poly_params.layout.display = 'flex'
             else:  # Gaussian, Voigt, Lorentzian
-                # Show: center, height, sigma
-                # Hide: slope, intercept, poly_degree
-                center_input.layout.visibility = 'visible'
-                height_input.layout.visibility = 'visible'
-                sigma_input.layout.visibility = 'visible'
-                slope_input.layout.visibility = 'hidden'
-                intercept_input.layout.visibility = 'hidden'
-                poly_degree_input.layout.visibility = 'hidden'
+                peak_params.layout.visibility = 'visible'
+                peak_params.layout.display = 'flex'
         
         peak_type.observe(on_peak_type_change, names='value')
-        
-        # Trigger initial update
         on_peak_type_change({'new': peak_type.value})
         
-        # Store references in the widgets for later access
+        # Store references
         peak_type._peak_idx = peak_idx
         center_input._peak_idx = peak_idx
-        center_input._param_name = 'center'
         height_input._peak_idx = peak_idx
-        height_input._param_name = 'height'
         sigma_input._peak_idx = peak_idx
-        sigma_input._param_name = 'sigma'
         slope_input._peak_idx = peak_idx
-        slope_input._param_name = 'slope'
         intercept_input._peak_idx = peak_idx
-        intercept_input._param_name = 'intercept'
         poly_degree_input._peak_idx = peak_idx
-        poly_degree_input._param_name = 'poly_degree'
         remove_btn._peak_idx = peak_idx
         
-        # Create layout - all widgets in a row, visibility controlled by callbacks
-        row = widgets.HBox([
-            widgets.HTML(value=f"<b>Model {peak_idx}:</b>", layout=widgets.Layout(width='70px')),
+        # Row 1: Model label, type selector, remove button
+        row1 = widgets.HBox([
+            widgets.HTML(value=f"<b>Model {peak_idx + 1}:</b>", layout=widgets.Layout(width='70px')),
             peak_type,
-            center_input,
-            height_input,
-            sigma_input,
-            slope_input,
-            intercept_input,
-            poly_degree_input,
             remove_btn
         ])
         
-        peak_row = widgets.VBox([row])
+        # Final layout with minimal spacing
+        peak_row = widgets.VBox([row1, params_area], layout=widgets.Layout(
+            margin='2px 0px 2px 0px',
+            padding='5px',
+            #border='1px solid #ddd'
+        ))
+        
         peak_row._peak_idx = peak_idx
         peak_row._widgets = {
             'type': peak_type,
@@ -667,6 +581,9 @@ class GUIComponents:
             'slope': slope_input,
             'intercept': intercept_input,
             'poly_degree': poly_degree_input,
+            'fix_center': fix_center_cb,
+            'fix_height': fix_height_cb,
+            'fix_sigma': fix_sigma_cb,
             'remove': remove_btn
         }
         

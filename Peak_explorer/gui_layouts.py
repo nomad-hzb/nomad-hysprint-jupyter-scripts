@@ -74,23 +74,43 @@ class GUILayouts:
         return section
     
     def create_time_control_section(self):
-        """Create time control section"""
+        """Create time control section with wavelength range"""
         section = widgets.VBox([
             widgets.HTML("<h3>⏱️ Time Control</h3>"),
             widgets.HBox([
                 self.widgets['time_input'],
                 self.widgets['time_display']
             ]),
-            self.widgets['time_slider']
+            self.widgets['time_slider'],
+            widgets.HTML("<b>Wavelength Range:</b>"),
+            self.widgets['wavelength_range_slider']
         ])
         
         debug_print("Created time control section layout", "GUI")
         return section
+
+    def create_colorbar_section(self):
+        """Create colorbar control section (collapsible)"""
+        content_widgets = [
+            self.widgets['colorbar_range_slider'],
+            self.widgets['colorbar_apply_btn']
+        ]
+        
+        section = self.components.create_collapsible_section(
+            "🎨 Heatmap Colors",
+            content_widgets
+        )
+        
+        # Set to collapsed by default
+        section.selected_index = None
+        
+        debug_print("Created colorbar section layout", "GUI")
+        return section
     
     def create_background_section(self):
         """Create unified background handling section"""
-        # Create compact containers for each method's widgets
-        manual_widgets = widgets.VBox([
+        # Create containers for each method
+        manual_container = widgets.VBox([
             self.widgets['bg_manual_description'],
             widgets.HBox([
                 self.widgets['bg_manual_start'],
@@ -98,17 +118,19 @@ class GUILayouts:
             ])
         ])
         
-        linear_widgets = widgets.HBox([
-            self.widgets['bg_linear_slope'],
-            self.widgets['bg_linear_intercept']
+        linear_container = widgets.VBox([
+            widgets.HBox([
+                self.widgets['bg_linear_slope'],
+                self.widgets['bg_linear_intercept']
+            ])
         ])
         
-        poly_widgets = widgets.VBox([
+        poly_container = widgets.VBox([
             self.widgets['bg_poly_degree'],
             self.widgets['bg_poly_coeffs']
         ])
         
-        exp_widgets = widgets.VBox([
+        exp_container = widgets.VBox([
             widgets.HBox([
                 self.widgets['bg_exp_amplitude'],
                 self.widgets['bg_exp_decay']
@@ -116,20 +138,41 @@ class GUILayouts:
             self.widgets['bg_exp_offset']
         ])
         
-        # Add custom widgets
-        custom_widgets = widgets.VBox([
+        custom_container = widgets.VBox([
             self.widgets['bg_custom_description'],
             self.widgets['bg_custom_upload'],
             self.widgets['bg_custom_status']
         ])
         
+        # Store containers for later access
+        self._bg_containers = {
+            'Manual': manual_container,
+            'Linear': linear_container,
+            'Polynomial': poly_container,
+            'Exponential': exp_container,
+            'Custom': custom_container
+        }
+        
+        # HIDE ALL CONTAINERS INITIALLY
+        for container in self._bg_containers.values():
+            container.layout.visibility = 'hidden'
+            container.layout.display = 'none'
+        
+        # Method-specific area that shows only ONE container at a time
+        self._method_area = widgets.VBox([
+            manual_container,
+            linear_container,
+            poly_container,
+            exp_container,
+            custom_container
+        ], layout=widgets.Layout(
+            min_height='80px',
+            max_height='150px'
+        ))
+        
         content_widgets = [
             self.widgets['background_method'],
-            manual_widgets,
-            linear_widgets,
-            poly_widgets,
-            exp_widgets,
-            custom_widgets,  # Add this line
+            self._method_area,
             widgets.HBox([
                 self.widgets['bg_autofit_btn'],
                 self.widgets['bg_apply_btn'],
@@ -142,21 +185,50 @@ class GUILayouts:
             content_widgets
         )
         
+        # Set to collapsed by default
+        section.selected_index = None
+        
         # Store reference for later access
         self._background_section = section
         
         debug_print("Created background section layout", "GUI")
         return section
+
+    def create_fitting_actions_section(self):
+        """Create fitting actions section"""
+        section = widgets.VBox([
+            widgets.HTML("<h3>🔧 Fitting Actions</h3>"),
+            widgets.HBox([
+                self.widgets['fit_current_btn'],
+                self.widgets['update_params_btn']
+            ]),
+            self.widgets['r_squared_display']
+        ])
+        
+        debug_print("Created fitting actions section layout", "GUI")
+        return section
     
     def create_peak_detection_section(self):
         """Create peak detection and fitting section (collapsible)"""
+        # Detection parameters: labels on top, widgets below
+        param_labels = widgets.HBox([
+            widgets.Label('Height:', layout=widgets.Layout(width='100px')),
+            widgets.Label('Prominence:', layout=widgets.Layout(width='100px')),
+            widgets.Label('Distance:', layout=widgets.Layout(width='100px'))
+        ])
+        
+        param_widgets = widgets.HBox([
+            self.widgets['peak_height_threshold'],
+            self.widgets['peak_prominence'],
+            self.widgets['peak_distance']
+        ])
+        
         content_widgets = [
             widgets.HTML("<b>Auto-Detection:</b>"),
             self.widgets['auto_detect_btn'],
             widgets.HTML("<b>Detection Parameters:</b>"),
-            self.widgets['peak_height_threshold'],
-            self.widgets['peak_prominence'],
-            self.widgets['peak_distance'],
+            param_labels,
+            param_widgets,
             widgets.HTML("<hr>"),
             widgets.HTML("<b>Peak Models:</b>"),
             self.widgets['add_peak_btn'],
@@ -171,25 +243,8 @@ class GUILayouts:
         debug_print("Created peak detection section layout", "GUI")
         return section
     
-    def create_fitting_actions_section(self):
-        """Create fitting actions section"""
-        section = widgets.VBox([
-            widgets.HTML("<h3>🔧 Fitting Actions</h3>"),
-            widgets.HTML("<b>Wavelength Range (nm):</b>"),
-            self.widgets['wavelength_range_slider'],
-            widgets.HTML("<b>Actions:</b>"),
-            widgets.HBox([
-                self.widgets['fit_current_btn'],
-                self.widgets['update_params_btn']
-            ]),
-            self.widgets['r_squared_display']
-        ])
-        
-        debug_print("Created fitting actions section layout", "GUI")
-        return section
-    
     def create_batch_fitting_section(self):
-        """Create batch fitting section"""
+        """Create batch fitting section with unit conversion at bottom"""
         section = widgets.VBox([
             widgets.HTML("<h3>📊 Batch Fitting</h3>"),
             widgets.HTML("<b>Range Selection:</b>"),
@@ -202,8 +257,15 @@ class GUILayouts:
                 self.widgets['fit_all_btn'],
                 self.widgets['fit_all_range_btn']
             ]),
+            self.widgets['fit_progress'],  # Add progress bar
             self.widgets['export_btn'],
-            self.widgets['export_output']
+            self.widgets['export_output'],
+            widgets.HTML("<hr>"),
+            widgets.HTML("<h4>📏 Unit Conversion (Test)</h4>"),
+            widgets.HBox([
+                self.widgets['toggle_angstrom_btn'],
+                self.widgets['unit_display']
+            ])
         ])
         
         debug_print("Created batch fitting section layout", "GUI")
@@ -244,7 +306,7 @@ class GUILayouts:
             widgets.HTML("<hr>"),
             self.create_file_section(),
             self.create_time_control_section(),
-            self.create_unit_conversion_section(),
+            self.create_colorbar_section(),  
             self.create_fitting_control_section()
         ], layout=widgets.Layout(
             width=config.CONTROL_PANEL_WIDTH,
@@ -273,20 +335,6 @@ class GUILayouts:
         debug_print("Created main layout", "GUI")
         return header, main_content
 
-    def create_unit_conversion_section(self):
-        """Create unit conversion section"""
-        section = widgets.VBox([
-            widgets.HTML("<h3>📏 Unit Conversion</h3>"),
-            widgets.HBox([
-                self.widgets['toggle_angstrom_btn'],
-                self.widgets['unit_display']
-            ])
-        ])
-        
-        debug_print("Created unit conversion section layout", "GUI")
-        return section
-
-
 # =============================================================================
 # MAIN APPLICATION CLASS
 # =============================================================================
@@ -302,6 +350,8 @@ class PLAnalysisApp:
         self.data_manager = DataManager()
         self.fitting_engine = FittingEngine()
         self.plot_manager = PlotManager()
+        self.plot_manager.app_ref = self
+        debug_print("PlotManager app_ref set", "APP")
         self.export_utils = ResultExporter()
         
         # Initialize GUI components
@@ -358,6 +408,22 @@ class PLAnalysisApp:
         
         # Export callback
         self.widgets['export_btn'].on_click(self.on_export_results)
+
+        # Colorbar control callbacks
+        self.widgets['colorbar_apply_btn'].on_click(self.on_colorbar_apply)
+        
+        # Auto-apply when slider value changes
+        def on_colorbar_slider_change(change):
+            """Auto-apply colorbar when slider changes"""
+            if self.data_manager.is_data_loaded():
+                z_min, z_max = change['new']
+                self.update_heatmap_colorbar(z_min, z_max)
+                
+                with self.widgets['status_output']:
+                    self.widgets['status_output'].clear_output()
+                    print(f"✅ Colorbar range: {z_min:.1f} - {z_max:.1f}")
+        
+        self.widgets['colorbar_range_slider'].observe(on_colorbar_slider_change, names='value')
         
         # Background handling callbacks
         self.widgets['background_method'].observe(self.on_background_method_change, names='value')
@@ -656,6 +722,27 @@ class PLAnalysisApp:
         self.widgets['wavelength_range_slider'].max = wavelength_max
         self.widgets['wavelength_range_slider'].value = [wavelength_min, wavelength_max]
         self.widgets['wavelength_range_slider'].disabled = False
+
+        # Enable colorbar controls
+        data_min = float(self.data_manager.data_matrix.min())
+        data_max = float(self.data_manager.data_matrix.max())
+        # Set min and max carefully to avoid min > max error
+        if data_min < data_max:
+            # Set max first if increasing range
+            if data_max > self.widgets['colorbar_range_slider'].max:
+                self.widgets['colorbar_range_slider'].max = data_max
+                self.widgets['colorbar_range_slider'].min = data_min
+            else:
+                self.widgets['colorbar_range_slider'].min = data_min
+                self.widgets['colorbar_range_slider'].max = data_max
+            self.widgets['colorbar_range_slider'].value = (data_min, data_max)
+        else:
+            # Handle edge case where min == max
+            self.widgets['colorbar_range_slider'].min = data_min - 1
+            self.widgets['colorbar_range_slider'].max = data_max + 1
+            self.widgets['colorbar_range_slider'].value = (data_min, data_max)
+        self.widgets['colorbar_range_slider'].disabled = False
+        self.widgets['colorbar_apply_btn'].disabled = False
         
         debug_print("UI updated after data load", "APP")
 
@@ -773,22 +860,40 @@ class PLAnalysisApp:
             debug_print("Auto-detecting peaks", "APP")
             
             current_spectrum = self.data_manager.get_current_spectrum()
+            wavelengths = self.data_manager.wavelengths
+            
+            # Get wavelength range from slider
+            wl_range = self.widgets['wavelength_range_slider'].value
+            wl_min = float(wavelengths.min())
+            wl_max = float(wavelengths.max())
+            is_limited = (wl_range[0] > wl_min) or (wl_range[1] < wl_max)
+            
+            # If range is limited, only detect peaks in that range
+            if is_limited:
+                mask = (wavelengths >= wl_range[0]) & (wavelengths <= wl_range[1])
+                wavelengths_detect = wavelengths[mask]
+                spectrum_detect = current_spectrum[mask]
+                debug_print(f"Detecting peaks in range: {wl_range[0]:.1f} - {wl_range[1]:.1f} {self.wavelength_unit}", "APP")
+            else:
+                wavelengths_detect = wavelengths
+                spectrum_detect = current_spectrum
+                debug_print("Detecting peaks in full range", "APP")
             
             # Get detection parameters from UI
             min_height = self.widgets['peak_height_threshold'].value
             if min_height == 0:
-                min_height = np.max(current_spectrum) * 0.05
+                min_height = np.max(spectrum_detect) * 0.05
             
             min_prominence = self.widgets['peak_prominence'].value
             if min_prominence == 0:
-                min_prominence = np.std(current_spectrum) * 2
+                min_prominence = np.std(spectrum_detect) * 2
             
             min_distance = self.widgets['peak_distance'].value
             
             # Detect peaks
             peaks_info = self.fitting_engine.detect_peaks(
-                self.data_manager.wavelengths,
-                current_spectrum,
+                wavelengths_detect,
+                spectrum_detect,
                 height=min_height,
                 prominence=min_prominence,
                 distance=min_distance
@@ -797,15 +902,23 @@ class PLAnalysisApp:
             # Clear existing peak models
             self.clear_peak_models()
             
-            # Add models for detected peaks
+            # Add models for detected peaks (round to 3 decimals for display)
             for peak in peaks_info:
-                self.add_peak_model(peak_info=peak)
+                rounded_peak = {
+                    'center': round(peak['center'], 3),
+                    'height': round(peak['height'], 3),
+                    'sigma': round(peak['sigma'], 3),
+                    'type': peak.get('type', config.DEFAULT_PEAK_MODEL)
+                }
+                self.add_peak_model(peak_info=rounded_peak)
             
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"🔍 Detected {len(peaks_info)} peaks")
+                if is_limited:
+                    print(f"   Range: {wl_range[0]:.1f} - {wl_range[1]:.1f} {self.wavelength_unit}")
                 for i, peak in enumerate(peaks_info):
-                    print(f"  Peak {i+1}: {peak['center']:.1f} nm, height: {peak['height']:.0f}")
+                    print(f"  Peak {i+1}: {peak['center']:.3f} {self.wavelength_unit}, height: {peak['height']:.1f}")
             
             debug_print(f"Detected {len(peaks_info)} peaks", "APP")
                     
@@ -1004,6 +1117,47 @@ class PLAnalysisApp:
                 print(traceback.format_exc())
             debug_print(f"Error in energy conversion: {e}", "APP")
     
+    def on_colorbar_apply(self, button):
+        """Apply colorbar range from slider"""
+        if not self.data_manager.is_data_loaded():
+            return
+        
+        try:
+            # Small delay to ensure any typed values are committed
+            import time
+            time.sleep(0.1)
+            
+            z_min, z_max = self.widgets['colorbar_range_slider'].value
+            
+            self.update_heatmap_colorbar(z_min, z_max)
+            
+            with self.widgets['status_output']:
+                self.widgets['status_output'].clear_output()
+                print(f"✅ Colorbar range applied")
+                print(f"   Range: {z_min:.1f} - {z_max:.1f}")
+            
+            debug_print(f"Colorbar range applied: {z_min:.1f} - {z_max:.1f}", "APP")
+            
+        except Exception as e:
+            debug_print(f"Error applying colorbar: {e}", "APP")
+    
+    def update_heatmap_colorbar(self, z_min, z_max):
+        """Update heatmap colorbar range dynamically"""
+        if self.plot_manager.heatmap_fig is None:
+            debug_print("No heatmap to update", "APP")
+            return
+        
+        try:
+            # Update the heatmap's zmin and zmax using FigureWidget
+            with self.plot_manager.heatmap_fig.batch_update():
+                self.plot_manager.heatmap_fig.data[0].zmin = z_min
+                self.plot_manager.heatmap_fig.data[0].zmax = z_max
+            
+            debug_print(f"Updated heatmap colorbar: {z_min:.1f} - {z_max:.1f}", "APP")
+            
+        except Exception as e:
+            debug_print(f"Error updating heatmap colorbar: {e}", "APP")
+    
     def remove_peak_model(self, peak_idx):
         """Remove a peak model"""
         if len(self.peak_models) <= 1:
@@ -1031,8 +1185,14 @@ class PLAnalysisApp:
         self.update_peak_list_container()
     
     def update_peak_list_container(self):
-        """Update the peak list container widget"""
-        self.widgets['peak_list_container'].children = tuple(self.peak_models)
+        """Update the peak list container widget with grid layout"""
+        if len(self.peak_models) == 0:
+            self.widgets['peak_list_container'].children = tuple()
+        else:
+            # Use GridBox for better layout (2 columns)
+            from ipywidgets import GridBox
+            
+            self.widgets['peak_list_container'].children = tuple(self.peak_models)
     
     # =========================================================================
     # FITTING OPERATIONS
@@ -1041,8 +1201,8 @@ class PLAnalysisApp:
     def prepare_fit_parameters(self):
         """Prepare fitting parameters from UI inputs"""
         params = {
-            'background_model': 'None',  # Background already applied to data
-            'poly_degree': 2,  # Not used since background_model is None
+            'background_model': 'None',
+            'poly_degree': 2,
             'peak_models': []
         }
         
@@ -1055,54 +1215,25 @@ class PLAnalysisApp:
             
             # Add parameters based on model type
             if model_type == 'Linear':
-                slope = peak_model._widgets['slope'].value
-                intercept = peak_model._widgets['intercept'].value
-                
-                # Auto-initialize if values are at defaults (0, 0)
-                if slope == 0.0 and intercept == 0.0 and self.data_manager.is_data_loaded():
-                    # Get current spectrum for initialization
-                    spectrum = self.data_manager.get_current_spectrum()
-                    wavelengths = self.data_manager.wavelengths
-                    
-                    # Estimate linear baseline from first and last points
-                    # Use first 10% and last 10% of data to avoid peaks
-                    n_points = len(spectrum)
-                    start_idx = int(n_points * 0.05)
-                    end_idx = int(n_points * 0.95)
-                    
-                    y_start = np.median(spectrum[:start_idx]) if start_idx > 0 else spectrum[0]
-                    y_end = np.median(spectrum[end_idx:]) if end_idx < n_points else spectrum[-1]
-                    x_start = wavelengths[start_idx] if start_idx < n_points else wavelengths[0]
-                    x_end = wavelengths[end_idx] if end_idx < n_points else wavelengths[-1]
-                    
-                    # Calculate slope and intercept
-                    if x_end != x_start:
-                        slope = (y_end - y_start) / (x_end - x_start)
-                        intercept = y_start - slope * x_start
-                    else:
-                        slope = 0.0
-                        intercept = np.median(spectrum)
-                    
-                    debug_print(f"Auto-initialized Linear model: slope={slope:.3f}, intercept={intercept:.3f}", "APP")
-                    
-                    # Update the widgets so user can see the values
-                    peak_model._widgets['slope'].value = float(slope)
-                    peak_model._widgets['intercept'].value = float(intercept)
-                
-                peak_params['slope'] = slope
-                peak_params['intercept'] = intercept
+                peak_params['slope'] = peak_model._widgets['slope'].value
+                peak_params['intercept'] = peak_model._widgets['intercept'].value
                 
             elif model_type == 'Polynomial':
                 peak_params['poly_degree'] = peak_model._widgets['poly_degree'].value
-                # For polynomial, we'll let the fitting engine determine coefficients
                 
+                # Use fitted coefficients if available
+                if hasattr(peak_model, '_fitted_coeffs'):
+                    peak_params['fitted_coeffs'] = peak_model._fitted_coeffs
+                    
             else:  # Gaussian, Voigt, Lorentzian
                 peak_params['center'] = peak_model._widgets['center'].value
                 peak_params['height'] = peak_model._widgets['height'].value
                 peak_params['sigma'] = peak_model._widgets['sigma'].value
-            
-            # Debug print to verify values
-            debug_print(f"Model params: {peak_params}", "APP")
+                
+                # Add fix flags
+                peak_params['fix_center'] = peak_model._widgets['fix_center'].value
+                peak_params['fix_height'] = peak_model._widgets['fix_height'].value
+                peak_params['fix_sigma'] = peak_model._widgets['fix_sigma'].value
             
             params['peak_models'].append(peak_params)
         
@@ -1248,7 +1379,10 @@ class PLAnalysisApp:
             # Update R-squared display
             self.widgets['r_squared_display'].value = f"<b>R²:</b> {result.rsquared:.4f}"
             
-            # Enable update parameters button
+            # Automatically update parameters from fit
+            self.on_update_parameters(None)
+            
+            # Enable update parameters button (now just for manual re-update if needed)
             self.widgets['update_params_btn'].disabled = False
             
             # Create full-range arrays for plotting (pad with NaN outside fit range)
@@ -1279,11 +1413,12 @@ class PLAnalysisApp:
                                 full_comp[mask] = comp_values
                                 self._eval_components[comp_name] = full_comp
                                 debug_print(f"Component {comp_name}: {np.sum(~np.isnan(full_comp))} non-NaN values", "APP")
+                        else:
+                            self._eval_components = {}
                     
                     def eval_components(self):
-                        if hasattr(self, '_eval_components'):
-                            return self._eval_components
-                        return {}
+                        """Return component evaluations - THIS METHOD MUST BE AT CLASS LEVEL, NOT INSIDE __init__"""
+                        return self._eval_components
                 
                 plot_result = PlotResult(result, full_best_fit, full_residual, wavelengths, mask)
             else:
@@ -1307,14 +1442,24 @@ class PLAnalysisApp:
                 
                 fig.show(renderer=config.PLOT_RENDERER)
             
+            # Automatically update parameters from successful fit
+            if result.rsquared > 0.5:  # Only auto-update if fit is decent
+                self.on_update_parameters(None)
+                auto_updated = True
+            else:
+                auto_updated = False
+            
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"✅ Fit completed. R² = {result.rsquared:.4f}")
                 if is_limited:
-                    print(f"   Range: {wl_range[0]:.1f} - {wl_range[1]:.1f} nm")
-                print("🔄 Click 'Update from Fit' to use fitted values")
+                    print(f"   Range: {wl_range[0]:.1f} - {wl_range[1]:.1f} {self.wavelength_unit}")
+                if auto_updated:
+                    print("✅ Parameters automatically updated for batch fitting")
+                else:
+                    print("⚠️ Low R² - click 'Update from Fit' manually if needed")
             
-            debug_print(f"Fit complete: R²={result.rsquared:.4f}", "APP")
+            debug_print(f"Fit complete: R²={result.rsquared:.4f}, auto-updated={auto_updated}", "APP")
                 
         except Exception as e:
             import traceback
@@ -1328,10 +1473,11 @@ class PLAnalysisApp:
     def on_update_parameters(self, button):
         """Update model parameters with fitted values"""
         try:
+            debug_print("DEBUG: on_update_parameters called")
             if self.last_fit_result is None:
                 with self.widgets['status_output']:
                     self.widgets['status_output'].clear_output()
-                    print("❌ No fit result available. Please fit current spectrum first.")
+                    debug_print("❌ No fit result available. Please fit current spectrum first.")
                 return
             
             debug_print("Updating parameters from fit result", "APP")
@@ -1341,56 +1487,93 @@ class PLAnalysisApp:
             
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
-                print("🔄 Updating peak model parameters with fitted values...")
+                print("🔄 Updating model parameters with fitted values...")
             
-            # Update peak model parameters in UI
+            # Update ALL model parameters in UI
             updated_count = 0
-            for param_name, param in fitted_params.items():
-                if param_name.startswith('p') and '_' in param_name:
-                    parts = param_name.split('_', 1)
-                    try:
-                        peak_num = int(parts[0][1:])
-                        param_type = parts[1]
-                        
-                        if peak_num < len(self.peak_models):
-                            model = self.peak_models[peak_num]
+            for i, model in enumerate(self.peak_models):
+                model_type = model._widgets['type'].value
+                prefix = f'p{i}_'
+                
+                if model_type == 'Gaussian' or model_type == 'Voigt' or model_type == 'Lorentzian':
+                    # Update center
+                    center_param = f'{prefix}center'
+                    if center_param in fitted_params:
+                        model._widgets['center'].value = round(fitted_params[center_param].value, 3)
+                        print(f"  Model {i + 1} center: {fitted_params[center_param].value:.3f}")
+                        updated_count += 1
+                    
+                    # Update sigma
+                    sigma_param = f'{prefix}sigma'
+                    if sigma_param in fitted_params:
+                        model._widgets['sigma'].value = round(fitted_params[sigma_param].value, 3)
+                        print(f"  Model {i + 1} sigma: {fitted_params[sigma_param].value:.3f}")
+                        updated_count += 1
+                    
+                    # Update height (converted from amplitude)
+                    amplitude_param = f'{prefix}amplitude'
+                    if amplitude_param in fitted_params and sigma_param in fitted_params:
+                        amplitude = fitted_params[amplitude_param].value
+                        sigma = fitted_params[sigma_param].value
+                        if sigma > 0:
+                            height = amplitude / (sigma * np.sqrt(2 * np.pi))
+                            model._widgets['height'].value = round(height, 3)
+                            print(f"  Model {i + 1} height: {height:.3f}")
+                            updated_count += 1
                             
-                            if param_type == 'center':
-                                model._widgets['center'].value = round(param.value, 2)
-                                print(f"  Peak {peak_num + 1} center: {param.value:.2f} nm")
-                                updated_count += 1
-                                
-                            elif param_type == 'amplitude':
-                                # Convert amplitude to height
-                                sigma_param = f'p{peak_num}_sigma'
-                                if sigma_param in fitted_params:
-                                    sigma = fitted_params[sigma_param].value
-                                    if sigma > 0:
-                                        height = param.value / (sigma * np.sqrt(2 * np.pi))
-                                        model._widgets['height'].value = round(height, 1)
-                                        print(f"  Peak {peak_num + 1} height: {height:.1f}")
-                                        updated_count += 1
-                                else:
-                                    model._widgets['height'].value = round(param.value, 1)
-                                    updated_count += 1
-                                    
-                            elif param_type == 'sigma':
-                                model._widgets['sigma'].value = round(param.value, 2)
-                                print(f"  Peak {peak_num + 1} sigma: {param.value:.2f} nm")
-                                updated_count += 1
-                                
-                    except (ValueError, IndexError):
-                        continue
+                elif model_type == 'Linear':
+                    # Update slope and intercept
+                    slope_param = f'{prefix}slope'
+                    intercept_param = f'{prefix}intercept'
+                    
+                    if slope_param in fitted_params:
+                        model._widgets['slope'].value = round(fitted_params[slope_param].value, 3)
+                        print(f"  Model {i + 1} slope: {fitted_params[slope_param].value:.3f}")
+                        updated_count += 1
+                        
+                    if intercept_param in fitted_params:
+                        model._widgets['intercept'].value = round(fitted_params[intercept_param].value, 3)
+                        print(f"  Model {i + 1} intercept: {fitted_params[intercept_param].value:.3f}")
+                        updated_count += 1
+                        
+                elif model_type == 'Polynomial':
+                    # Update polynomial coefficients
+                    # First, figure out the degree
+                    degree = model._widgets['poly_degree'].value
+                    
+                    # Extract all coefficients
+                    coeffs = []
+                    for j in range(degree + 1):
+                        coeff_param = f'{prefix}c{j}'
+                        if coeff_param in fitted_params:
+                            coeffs.append(fitted_params[coeff_param].value)
+                        else:
+                            coeffs.append(0.0)  # Fallback
+                    
+                    # Store them (we'll need to add a way to pass these)
+                    # For now, just print them
+                    print(f"  Model {i + 1} (Polynomial degree {degree}):")
+                    for j, coeff in enumerate(coeffs):
+                        print(f"    c{j}: {coeff:.6f}")
+                    
+                    # Store coefficients in the model for later use
+                    if not hasattr(model, '_fitted_coeffs'):
+                        model._fitted_coeffs = {}
+                    model._fitted_coeffs = coeffs
+                    updated_count += 1
             
             with self.widgets['status_output']:
-                print(f"✅ Updated {updated_count} parameters")
+                print(f"✅ Updated {updated_count} parameters from fit")
             
             debug_print(f"Updated {updated_count} parameters from fit", "APP")
                 
         except Exception as e:
+            import traceback
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"❌ Error updating parameters: {str(e)}")
+                print("\n🔍 Traceback:")
+                traceback.print_exc()
             debug_print(f"Error updating parameters: {e}", "APP")
     
     def on_fit_all(self, button):
@@ -1405,30 +1588,67 @@ class PLAnalysisApp:
             
             debug_print("Starting batch fitting for all spectra", "APP")
             
+            # Show progress bar
+            self.widgets['fit_progress'].layout.visibility = 'visible'
+            self.widgets['fit_progress'].value = 0
+            self.widgets['fit_progress'].description = 'Fitting...'
+            
             # Prepare fitting parameters
             fit_params = self.prepare_fit_parameters()
             self.fitting_engine.create_fit_parameters(**fit_params)
             
+            # Get wavelength range from slider
+            wl_range = self.widgets['wavelength_range_slider'].value
+            wavelengths = self.data_manager.wavelengths
+            wl_min = float(wavelengths.min())
+            wl_max = float(wavelengths.max())
+            is_limited = (wl_range[0] > wl_min) or (wl_range[1] < wl_max)
+            
+            # Apply wavelength range mask if limited
+            if is_limited:
+                mask = (wavelengths >= wl_range[0]) & (wavelengths <= wl_range[1])
+                wavelengths_fit = wavelengths[mask]
+                data_matrix_fit = self.data_manager.data_matrix[:, mask]
+                debug_print(f"Batch fitting with wavelength range: {wl_range[0]:.1f} - {wl_range[1]:.1f} {self.wavelength_unit}", "APP")
+                debug_print(f"Full wavelengths: {len(wavelengths)}, Fit wavelengths: {len(wavelengths_fit)}", "APP")
+            else:
+                wavelengths_fit = wavelengths
+                data_matrix_fit = self.data_manager.data_matrix
+                debug_print("Batch fitting full wavelength range", "APP")
+            
             # Perform batch fitting
             results = self.fitting_engine.fit_all_spectra(
-                self.data_manager.wavelengths,
-                self.data_manager.data_matrix,
+                wavelengths_fit,
+                data_matrix_fit,
                 self.data_manager.timestamps
             )
             
             # Count successful fits
             successful = sum(1 for r in results.values() if r and r.get('success', False))
             
+            # Store results for export
+            self.fitting_engine.fitting_results = results
+            
             # Enable export button
             self.widgets['export_btn'].disabled = False
             
-            # Create time series visualizations
+            # Create time series visualizations with explicit clear
+            with self.widgets['time_series_output']:
+                self.widgets['time_series_output'].clear_output(wait=True)
+            
             self.create_time_series_plots()
+            
+            debug_print("Time series plots refreshed", "APP")
             
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"✅ Batch fitting completed!")
                 print(f"📊 Fitted {successful}/{len(results)} spectra successfully.")
+            
+            # Update progress bar to complete
+            self.widgets['fit_progress'].value = 100
+            self.widgets['fit_progress'].description = 'Complete!'
+            self.widgets['fit_progress'].bar_style = 'success'
             
             debug_print(f"Batch fitting complete: {successful}/{len(results)} successful", "APP")
                 
@@ -1453,26 +1673,44 @@ class PLAnalysisApp:
                     print("❌ Start index must be less than end index")
                 return
             
-            # Validate range
-            _, max_idx = self.data_manager.get_time_range()
-            if end_idx > max_idx:
-                end_idx = max_idx
-                self.widgets['fit_end_idx'].value = end_idx
-            
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
-                print(f"Starting range fitting from {start_idx} to {end_idx}...")
+                print(f"Starting range fitting ({start_idx} to {end_idx})...")
             
             debug_print(f"Starting range fitting: {start_idx} to {end_idx}", "APP")
+            
+            # Show progress bar
+            self.widgets['fit_progress'].layout.visibility = 'visible'
+            self.widgets['fit_progress'].value = 0
+            self.widgets['fit_progress'].description = 'Fitting...'
             
             # Prepare fitting parameters
             fit_params = self.prepare_fit_parameters()
             self.fitting_engine.create_fit_parameters(**fit_params)
             
-            # Perform batch fitting on range
+            # Get wavelength range from slider
+            wl_range = self.widgets['wavelength_range_slider'].value
+            wavelengths = self.data_manager.wavelengths
+            wl_min = float(wavelengths.min())
+            wl_max = float(wavelengths.max())
+            is_limited = (wl_range[0] > wl_min) or (wl_range[1] < wl_max)
+            
+            # Apply wavelength range mask if limited
+            if is_limited:
+                mask = (wavelengths >= wl_range[0]) & (wavelengths <= wl_range[1])
+                wavelengths_fit = wavelengths[mask]
+                data_matrix_fit = self.data_manager.data_matrix[:, mask]
+                debug_print(f"Range fitting with wavelength range: {wl_range[0]:.1f} - {wl_range[1]:.1f} {self.wavelength_unit}", "APP")
+                debug_print(f"Full wavelengths: {len(wavelengths)}, Fit wavelengths: {len(wavelengths_fit)}", "APP")
+            else:
+                wavelengths_fit = wavelengths
+                data_matrix_fit = self.data_manager.data_matrix
+                debug_print("Range fitting full wavelength range", "APP")
+            
+            # Perform batch fitting on range with progress callback
             results = self.fitting_engine.fit_all_spectra(
-                self.data_manager.wavelengths,
-                self.data_manager.data_matrix,
+                wavelengths_fit,
+                data_matrix_fit,
                 self.data_manager.timestamps,
                 fit_range=(start_idx, end_idx)
             )
@@ -1483,13 +1721,23 @@ class PLAnalysisApp:
             # Enable export button
             self.widgets['export_btn'].disabled = False
             
-            # Create time series visualizations
+            # Create time series visualizations with explicit clear
+            with self.widgets['time_series_output']:
+                self.widgets['time_series_output'].clear_output(wait=True)
+            
             self.create_time_series_plots()
+            
+            debug_print("Time series plots refreshed", "APP")
             
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"✅ Range fitting completed!")
                 print(f"📊 Fitted {successful}/{len(results)} spectra successfully.")
+            
+            # Update progress bar to complete
+            self.widgets['fit_progress'].value = 100
+            self.widgets['fit_progress'].description = 'Complete!'
+            self.widgets['fit_progress'].bar_style = 'success'
             
             debug_print(f"Range fitting complete: {successful}/{len(results)} successful", "APP")
                 
@@ -1676,6 +1924,10 @@ class PLAnalysisApp:
         try:
             debug_print("Creating time series plots", "APP")
             
+            # Explicitly clear output first
+            with self.widgets['time_series_output']:
+                self.widgets['time_series_output'].clear_output(wait=True)
+            
             self.plot_manager.create_time_series_plots(
                 self.fitting_engine.fitting_results,
                 output_widget=self.widgets['time_series_output']
@@ -1698,55 +1950,54 @@ class PLAnalysisApp:
         method = change['new']
         debug_print(f"Background method changed to: {method}", "APP")
         
-        # Hide and disable all method-specific widgets first
-        for widget_name in ['bg_manual_start', 'bg_manual_num', 'bg_manual_description',
-                            'bg_linear_slope', 'bg_linear_intercept',
-                            'bg_poly_degree', 'bg_poly_coeffs',
-                            'bg_exp_amplitude', 'bg_exp_decay', 'bg_exp_offset',
-                            'bg_custom_upload', 'bg_custom_description', 'bg_custom_status']:
-            if widget_name in self.widgets:
-                self.widgets[widget_name].layout.visibility = 'hidden'
-                # Only disable if it's not an HTML widget (HTML widgets don't have disabled property)
-                if hasattr(self.widgets[widget_name], 'disabled'):
-                    self.widgets[widget_name].disabled = True
+        # Get data loaded state
+        data_loaded = self.data_manager.is_data_loaded()
         
-        # Show and enable relevant widgets based on method
-        if method == 'Manual':
-            self.widgets['bg_manual_description'].layout.visibility = 'visible'
-            self.widgets['bg_manual_start'].layout.visibility = 'visible'
-            self.widgets['bg_manual_start'].disabled = False
-            self.widgets['bg_manual_num'].layout.visibility = 'visible'
-            self.widgets['bg_manual_num'].disabled = False
-        elif method == 'Linear':
-            self.widgets['bg_linear_slope'].layout.visibility = 'visible'
-            self.widgets['bg_linear_slope'].disabled = False
-            self.widgets['bg_linear_intercept'].layout.visibility = 'visible'
-            self.widgets['bg_linear_intercept'].disabled = False
-        elif method == 'Polynomial':
-            self.widgets['bg_poly_degree'].layout.visibility = 'visible'
-            self.widgets['bg_poly_degree'].disabled = False
-            self.widgets['bg_poly_coeffs'].layout.visibility = 'visible'
-            self.widgets['bg_poly_coeffs'].disabled = False
-        elif method == 'Exponential':
-            self.widgets['bg_exp_amplitude'].layout.visibility = 'visible'
-            self.widgets['bg_exp_amplitude'].disabled = False
-            self.widgets['bg_exp_decay'].layout.visibility = 'visible'
-            self.widgets['bg_exp_decay'].disabled = False
-            self.widgets['bg_exp_offset'].layout.visibility = 'visible'
-            self.widgets['bg_exp_offset'].disabled = False
-        elif method == 'Custom':
-            self.widgets['bg_custom_description'].layout.visibility = 'visible'
-            self.widgets['bg_custom_upload'].layout.visibility = 'visible'
-            self.widgets['bg_custom_upload'].disabled = False
-            self.widgets['bg_custom_status'].layout.visibility = 'visible'
+        # Hide all containers first
+        if hasattr(self.gui_layouts, '_bg_containers'):
+            for container in self.gui_layouts._bg_containers.values():
+                container.layout.visibility = 'hidden'
+                container.layout.display = 'none'
+        
+        # If None is selected, disable all buttons and return
+        if method == 'None':
+            self.widgets['bg_apply_btn'].disabled = True
+            self.widgets['bg_autofit_btn'].disabled = True
+            self.widgets['bg_autofit_btn'].layout.visibility = 'hidden'
+            return
+        
+        # Show and enable the selected method's container
+        if hasattr(self.gui_layouts, '_bg_containers') and method in self.gui_layouts._bg_containers:
+            self.gui_layouts._bg_containers[method].layout.visibility = 'visible'
+            self.gui_layouts._bg_containers[method].layout.display = 'flex'
+            
+            # Enable widgets for the selected method
+            if method == 'Manual' and data_loaded:
+                self.widgets['bg_manual_start'].disabled = False
+                self.widgets['bg_manual_num'].disabled = False
+            elif method == 'Linear' and data_loaded:
+                self.widgets['bg_linear_slope'].disabled = False
+                self.widgets['bg_linear_intercept'].disabled = False
+            elif method == 'Polynomial' and data_loaded:
+                self.widgets['bg_poly_degree'].disabled = False
+                self.widgets['bg_poly_coeffs'].disabled = False
+            elif method == 'Exponential' and data_loaded:
+                self.widgets['bg_exp_amplitude'].disabled = False
+                self.widgets['bg_exp_decay'].disabled = False
+                self.widgets['bg_exp_offset'].disabled = False
+            elif method == 'Custom' and data_loaded:
+                self.widgets['bg_custom_upload'].disabled = False
         
         # Enable/disable action buttons
-        can_apply = method != 'None'
+        can_apply = data_loaded
         self.widgets['bg_apply_btn'].disabled = not can_apply
-        self.widgets['bg_autofit_btn'].disabled = method not in ['Linear', 'Polynomial', 'Exponential']
+        
+        # Auto-fit button only for model-based methods
         if method in ['Linear', 'Polynomial', 'Exponential']:
+            self.widgets['bg_autofit_btn'].disabled = not data_loaded
             self.widgets['bg_autofit_btn'].layout.visibility = 'visible'
         else:
+            self.widgets['bg_autofit_btn'].disabled = True
             self.widgets['bg_autofit_btn'].layout.visibility = 'hidden'
     
     def on_background_autofit(self, button):
@@ -1767,12 +2018,14 @@ class PLAnalysisApp:
                 self.widgets['bg_linear_slope'].value = float(coeffs[0])
                 self.widgets['bg_linear_intercept'].value = float(coeffs[1])
                 self.background_model = coeffs[0] * wavelengths + coeffs[1]
+                debug_print(f"Background model set (Linear): shape={self.background_model.shape}, min={self.background_model.min():.2f}, max={self.background_model.max():.2f}", "APP")
                 
             elif method == 'Polynomial':
                 degree = self.widgets['bg_poly_degree'].value
                 coeffs = np.polyfit(wavelengths, current_spectrum, degree)
                 self.widgets['bg_poly_coeffs'].value = ', '.join([f'{c:.2e}' for c in coeffs])
                 self.background_model = np.polyval(coeffs, wavelengths)
+                debug_print(f"Background model set (Polynomial): shape={self.background_model.shape}, min={self.background_model.min():.2f}, max={self.background_model.max():.2f}", "APP")
                 
             elif method == 'Exponential':
                 # Fit exponential: y = amplitude * exp(-decay * x) + offset
@@ -1789,6 +2042,7 @@ class PLAnalysisApp:
                 self.widgets['bg_exp_decay'].value = float(popt[1])
                 self.widgets['bg_exp_offset'].value = float(popt[2])
                 self.background_model = exp_func(wavelengths, *popt)
+                debug_print(f"Background model set (Exponential): shape={self.background_model.shape}, min={self.background_model.min():.2f}, max={self.background_model.max():.2f}", "APP")
             
             # Update spectrum plot to show background
             self.update_spectrum_with_background()

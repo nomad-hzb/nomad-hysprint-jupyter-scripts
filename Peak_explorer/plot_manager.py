@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
+from utils import debug_print
 
 
 class Plotter:
@@ -80,8 +81,16 @@ class Plotter:
             margin=dict(l=70, r=100, t=60, b=60),
             font=dict(size=12),
             plot_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.3)'),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.3)'),
+            xaxis=dict(
+                showgrid=True, 
+                gridcolor='rgba(255,255,255,0.3)',
+                range=[timestamps.min(), timestamps.max()]
+            ),
+            yaxis=dict(
+                showgrid=True, 
+                gridcolor='rgba(255,255,255,0.3)',
+                range=[wavelengths.min(), wavelengths.max()]
+            ),
         )
 
         # Improve axis formatting
@@ -100,7 +109,7 @@ class Plotter:
 
         return fig
 
-    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm'):
+    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', background_model=None):
         """
         Create spectrum plot with optional fitting results
         Parameters:
@@ -133,6 +142,17 @@ class Plotter:
                 line=dict(color='black', width=3),
                 hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
             ), row=1, col=1)
+
+            # Add background model if provided
+            if background_model is not None:
+                fig.add_trace(go.Scatter(
+                    x=wavelengths,
+                    y=background_model,
+                    mode='lines',
+                    name='Background',
+                    line=dict(color='red', width=2, dash='dash'),
+                    hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Background: %{{y:.0f}}<extra></extra>"
+                ))
             
             # Fitted curve
             fig.add_trace(go.Scatter(
@@ -145,11 +165,19 @@ class Plotter:
             ), row=1, col=1)
             
             # Individual components if available
+            # Individual components if available
             if hasattr(fit_result, 'eval_components'):
+                debug_print("✓ fit_result has eval_components method", "PLOT")
                 components = fit_result.eval_components()
+                debug_print(f"✓ eval_components returned {len(components)} components", "PLOT")
+                debug_print(f"  Component names: {list(components.keys())}", "PLOT")
+                
                 color_idx = 0
                 for comp_name, comp_values in components.items():
+                    debug_print(f"  Processing component: {comp_name}, has {np.sum(~np.isnan(comp_values))} non-NaN values", "PLOT")
+                    
                     if comp_name != 'best_fit':
+                        debug_print(f"  ✓ Adding trace for {comp_name}", "PLOT")
                         fig.add_trace(go.Scatter(
                             x=wavelengths,
                             y=comp_values,
@@ -163,6 +191,10 @@ class Plotter:
                             hovertemplate=f"{comp_name}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
                         ), row=1, col=1)
                         color_idx += 1
+                    else:
+                        debug_print(f"  ✗ Skipping 'best_fit' component", "PLOT")
+            else:
+                debug_print("✗ fit_result does NOT have eval_components method", "PLOT")
                     
             # Residuals
             fig.add_trace(go.Scatter(
@@ -206,6 +238,17 @@ class Plotter:
                 line=dict(color='blue', width=3),
                 hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
             ))
+            
+            # Add background model if provided
+            if background_model is not None:
+                fig.add_trace(go.Scatter(
+                    x=wavelengths,
+                    y=background_model,
+                    mode='lines',
+                    name='Background',
+                    line=dict(color='red', width=2, dash='dash'),
+                    hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Background: %{{y:.0f}}<extra></extra>"
+                ))
             
             fig.update_layout(
                 title="Peak Analysis",
@@ -430,13 +473,29 @@ class PlotManager:
         debug_print(f"Creating spectrum plot (with_fit={fit_result is not None})", "PLOT")
         
         import plotly.graph_objects as go
-
+    
+        # Get background model if one exists
+        background_model = None
+        if hasattr(self, 'app_ref'):
+            debug_print(f"✓ app_ref exists: {self.app_ref is not None}", "PLOT")
+            if self.app_ref is not None and hasattr(self.app_ref, 'background_model'):
+                background_model = self.app_ref.background_model
+                if background_model is not None:
+                    debug_print(f"✓ Background model retrieved: shape={background_model.shape}, min={background_model.min():.2f}, max={background_model.max():.2f}", "PLOT")
+                else:
+                    debug_print("⚠ background_model attribute exists but is None", "PLOT")
+            else:
+                debug_print("⚠ app_ref exists but no background_model attribute", "PLOT")
+        else:
+            debug_print("✗ No app_ref attribute on PlotManager", "PLOT")
+        
         fig = self.visualization.create_spectrum_plot(
             wavelengths,
             intensities,
             fit_result=fit_result,
             wavelength_range=wavelength_range,
-            wavelength_unit=wavelength_unit
+            wavelength_unit=wavelength_unit,
+            background_model=background_model
         )
         
         # Convert to FigureWidget for dynamic updates
@@ -476,20 +535,39 @@ class PlotManager:
         # Create plots for each peak
         peak_columns = [col for col in df.columns if col.startswith('p')]
         peak_ids = list(set([col.split('_')[0] for col in peak_columns]))
+        peak_ids.sort()  # Sort to ensure consistent order
         
         # Plot 1: Peak centers vs time
         fig_centers = go.Figure()
-        for peak_id in peak_ids:
+        for i, peak_id in enumerate(peak_ids):
             center_col = f'{peak_id}_center'
             if center_col in df.columns:
-                fig_centers.add_trace(go.Scatter(
-                    x=df['time'],
-                    y=df[center_col],
-                    mode='lines+markers',
-                    name=f'{peak_id} center',
-                    line=dict(width=2),
-                    marker=dict(size=6)
-                ))
+                # Prepare customdata with both index and time
+                customdata = np.column_stack((df['index'].values, df['time'].values))
+                
+                if i == 0:
+                    # First trace shows Time Index and Time
+                    fig_centers.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[center_col],
+                        mode='lines+markers',
+                        name=f'{peak_id} center',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        customdata=customdata,
+                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
+                    ))
+                else:
+                    # Other traces just show their value
+                    fig_centers.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[center_col],
+                        mode='lines+markers',
+                        name=f'{peak_id} center',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
+                    ))
         
         fig_centers.update_layout(
             title="Peak Centers vs Time",
@@ -512,17 +590,35 @@ class PlotManager:
         
         # Plot 2: Peak heights vs time
         fig_heights = go.Figure()
-        for peak_id in peak_ids:
+        for i, peak_id in enumerate(peak_ids):
             height_col = f'{peak_id}_height'
             if height_col in df.columns:
-                fig_heights.add_trace(go.Scatter(
-                    x=df['time'],
-                    y=df[height_col],
-                    mode='lines+markers',
-                    name=f'{peak_id} height',
-                    line=dict(width=2),
-                    marker=dict(size=6)
-                ))
+                # Prepare customdata with both index and time
+                customdata = np.column_stack((df['index'].values, df['time'].values))
+                
+                if i == 0:
+                    # First trace shows Time Index and Time
+                    fig_heights.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[height_col],
+                        mode='lines+markers',
+                        name=f'{peak_id} height',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        customdata=customdata,
+                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.0f}<extra></extra>"
+                    ))
+                else:
+                    # Other traces just show their value
+                    fig_heights.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[height_col],
+                        mode='lines+markers',
+                        name=f'{peak_id} height',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        hovertemplate="%{fullData.name}: %{y:.0f}<extra></extra>"
+                    ))
         
         fig_heights.update_layout(
             title="Peak Heights vs Time",
@@ -546,13 +642,19 @@ class PlotManager:
         # Plot 3: R-squared vs time
         if 'r_squared' in df.columns:
             fig_quality = go.Figure()
+            
+            # Prepare customdata with both index and time
+            customdata = np.column_stack((df['index'].values, df['time'].values))
+            
             fig_quality.add_trace(go.Scatter(
                 x=df['time'],
                 y=df['r_squared'],
                 mode='lines+markers',
                 name='R²',
                 line=dict(width=2, color='blue'),
-                marker=dict(size=6)
+                marker=dict(size=6),
+                customdata=customdata,
+                hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>R²: %{y:.4f}<extra></extra>"
             ))
             
             fig_quality.update_layout(
@@ -596,7 +698,7 @@ class PlotManager:
                 continue
             
             row = {
-                'index': result.get('index', idx),
+                'index': int(result.get('index', idx)),
                 'time': result['time'],
                 'r_squared': result.get('r_squared', np.nan)
             }
@@ -626,6 +728,7 @@ class PlotManager:
         df = pd.DataFrame(data_rows)
         # Sort by time to ensure consecutive lines
         df = df.sort_values('time').reset_index(drop=True)
+        df['index'] = df['index'].astype(int)
         return df
     
     def export_plots(self, fitting_results, output_dir):
