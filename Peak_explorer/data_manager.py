@@ -146,7 +146,12 @@ class CSVDataLoader:
         return normalized_timestamps
 
     def load_data(self, file_content):
-        """Load photoluminescence data from file content"""
+        """
+        Load photoluminescence data from file content
+        Supports two formats:
+        1. PL measurement format: metadata lines + "Wavelength (nm)" header + data
+        2. Simple format: wavelengths in first row, timestamps in first column
+        """
         debug_print("=="*25, "DATA")
         debug_print("Starting CSV data load", "DATA")
         debug_print(f"File content type: {type(file_content)}", "DATA")
@@ -166,24 +171,19 @@ class CSVDataLoader:
             
             # Check for BOM to detect encoding
             if raw_bytes.startswith(b'\xff\xfe'):
-                # UTF-16 LE BOM
                 content_str = raw_bytes.decode('utf-16-le')
                 debug_print("Detected UTF-16 LE encoding (BOM: \\xff\\xfe)", "DATA")
             elif raw_bytes.startswith(b'\xfe\xff'):
-                # UTF-16 BE BOM
                 content_str = raw_bytes.decode('utf-16-be')
                 debug_print("Detected UTF-16 BE encoding (BOM: \\xfe\\xff)", "DATA")
             elif raw_bytes.startswith(b'\xef\xbb\xbf'):
-                # UTF-8 BOM
                 content_str = raw_bytes.decode('utf-8-sig')
                 debug_print("Detected UTF-8 encoding with BOM", "DATA")
             else:
-                # Default to UTF-8
                 try:
                     content_str = raw_bytes.decode('utf-8')
                     debug_print("Decoded as UTF-8", "DATA")
                 except UnicodeDecodeError:
-                    # Try UTF-16 without BOM as fallback
                     try:
                         content_str = raw_bytes.decode('utf-16')
                         debug_print("Decoded as UTF-16 (no BOM detected)", "DATA")
@@ -192,35 +192,52 @@ class CSVDataLoader:
         
         debug_print(f"String length: {len(content_str)} characters", "DATA")
         debug_print(f"First 200 chars: {content_str[:200]}", "DATA")
-
+        
         # Parse the file
         lines = content_str.strip().split('\n')
-
-        # Find the header row that contains "Wavelength"
+        debug_print(f"Total lines in file: {len(lines)}", "DATA")
+        
+        # Try to detect file format
+        has_wavelength_header = False
         header_row_idx = None
-        for i, line in enumerate(lines[:50]):  # Check first 50 lines
+        
+        # Check first 50 lines for "Wavelength" keyword
+        for i, line in enumerate(lines[:50]):
             line_stripped = line.strip()
             if any(keyword in line_stripped for keyword in ['Wavelength', 'wavelength', 'WAVELENGTH']):
                 header_row_idx = i
+                has_wavelength_header = True
+                debug_print(f"Found 'Wavelength' header at line {i}", "DATA")
                 break
-
-        if header_row_idx is None:
-            raise ValueError("Could not find 'Wavelength' header row in the file")
-
+        
+        if has_wavelength_header:
+            # Format 1: PL measurement format with metadata
+            debug_print("Using PL measurement format parser", "DATA")
+            return self._parse_pl_format(lines, header_row_idx)
+        else:
+            # Format 2: Simple format (wavelengths in row 0, timestamps in column 0)
+            debug_print("No 'Wavelength' header found, trying simple format parser", "DATA")
+            return self._parse_simple_format(lines)
+    
+    def _parse_pl_format(self, lines, header_row_idx):
+        """Parse PL measurement format with metadata and 'Wavelength' header"""
+        debug_print(f"Parsing PL format starting at line {header_row_idx}", "DATA")
+        
         # Extract metadata from lines before the header
         self.header_info = self._extract_metadata(lines[:header_row_idx])
-
+        debug_print(f"Extracted {len(self.header_info)} metadata items", "DATA")
+        
         # Parse header row to get timestamps
         header_line = lines[header_row_idx]
+        debug_print(f"Header line content: {header_line[:100]}...", "DATA")
         header_parts = header_line.split(',')
-
-        # Filter out empty strings and convert to float
-        timestamp_strings = header_parts[1:]
-        valid_timestamps = [x.strip() for x in timestamp_strings if x.strip()]
+        debug_print(f"Header split into {len(header_parts)} parts", "DATA")
+        
         # Filter out empty strings and convert to float
         timestamp_strings = header_parts[1:]
         valid_timestamps = [x.strip() for x in timestamp_strings if x.strip()]
         
+        debug_print(f"Found {len(valid_timestamps)} timestamp strings (before filtering)", "DATA")
         debug_print(f"Found {len(valid_timestamps)} valid timestamp strings", "DATA")
         debug_print(f"First timestamp string: '{valid_timestamps[0]}'", "DATA")
         debug_print(f"Last timestamp string: '{valid_timestamps[-1]}'", "DATA")
@@ -229,64 +246,64 @@ class CSVDataLoader:
         debug_print(f"Converted to array, shape: {timestamps_array.shape}", "DATA")
         debug_print(f"Timestamp range: {timestamps_array.min():.3f} to {timestamps_array.max():.3f}", "DATA")
         
-        # NORMALIZE TIMESTAMPS TO START AT ZERO
+        # Normalize timestamps to start at zero
         self.timestamps = self._normalize_timestamps_to_zero(timestamps_array)
         debug_print(f"After normalization: {self.timestamps.min():.3f} to {self.timestamps.max():.3f}", "DATA")
-
+        
         # Parse data rows
         wavelengths_list = []
         intensity_matrix = []
-
         data_lines = lines[header_row_idx + 1:]
-
+        debug_print(f"Processing {len(data_lines)} data lines", "DATA")
+        
         for line in data_lines:
             if not line.strip():
                 continue
-
+            
             parts = line.split(',')
             if len(parts) < 2:
                 continue
-
+            
             try:
-                # First column is wavelength
                 wavelength = float(parts[0])
                 wavelengths_list.append(wavelength)
-
-                # Remaining columns are intensities
+                
                 intensity_strings = parts[1:len(self.timestamps) + 1]
                 intensities = []
-
+                
                 for intensity_str in intensity_strings:
                     if intensity_str.strip():
                         intensities.append(float(intensity_str.strip()))
                     else:
                         intensities.append(0.0)
-
-                # Ensure we have the right number of intensities
+                
                 while len(intensities) < len(self.timestamps):
                     intensities.append(0.0)
-
+                
                 intensity_matrix.append(intensities[:len(self.timestamps)])
-
             except (ValueError, IndexError):
                 continue
-
-        # Convert to numpy arrays
+        
         if len(wavelengths_list) == 0:
             raise ValueError("No wavelength data found")
         if len(intensity_matrix) == 0:
             raise ValueError("No intensity data found")
-
+        
+        debug_print(f"Parsed {len(wavelengths_list)} wavelength rows", "DATA")
+        debug_print(f"Intensity matrix has {len(intensity_matrix)} rows", "DATA")
+        
         self.wavelengths = np.array(wavelengths_list)
+        debug_print(f"Wavelengths shape: {self.wavelengths.shape}", "DATA")
+        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} to {self.wavelengths.max():.2f} nm", "DATA")
+        
         intensity_array = np.array(intensity_matrix)
+        debug_print(f"Intensity array shape before transpose: {intensity_array.shape}", "DATA")
         
         # Transpose to have time as first dimension (time x wavelength)
         self.data_matrix = intensity_array.T
-        
-        debug_print(f"Intensity array shape before transpose: {intensity_array.shape}", "DATA")
         debug_print(f"Final data_matrix shape: {self.data_matrix.shape}", "DATA")
         
-        # **CRITICAL: Sanitize infinity and NaN values**
+        # Sanitize infinity and NaN values
         num_inf = np.sum(np.isinf(self.data_matrix))
         num_nan = np.sum(np.isnan(self.data_matrix))
         
@@ -296,6 +313,94 @@ class CSVDataLoader:
         
         debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
         debug_print("="*50, "DATA")
+        
+        return self.data_matrix, self.wavelengths, self.timestamps
+    
+    def _parse_simple_format(self, lines):
+        """
+        Parse simple format:
+        Row 0: wavelength values
+        Column 0: timestamp values
+        Rest: intensity data
+        """
+        debug_print("Parsing simple format", "DATA")
+        
+        if len(lines) < 2:
+            raise ValueError("File has too few lines for simple format")
+        
+        # First line contains wavelengths
+        first_line = lines[0].strip()
+        wavelength_strings = [x.strip() for x in first_line.split(',') if x.strip()]
+        
+        # First value might be empty or a label, skip if not numeric
+        try:
+            float(wavelength_strings[0])
+            wavelengths = [float(x) for x in wavelength_strings]
+        except ValueError:
+            # First value is a label, skip it
+            wavelengths = [float(x) for x in wavelength_strings[1:]]
+        
+        self.wavelengths = np.array(wavelengths)
+        debug_print(f"Found {len(self.wavelengths)} wavelengths", "DATA")
+        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f}", "DATA")
+        
+        # Remaining lines contain: timestamp, intensity1, intensity2, ...
+        timestamps_list = []
+        intensity_matrix = []
+        
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            
+            parts = [x.strip() for x in line.split(',')]
+            if len(parts) < 2:
+                continue
+            
+            try:
+                timestamp = float(parts[0])
+                timestamps_list.append(timestamp)
+                
+                # Get intensities (should match number of wavelengths)
+                intensities = [float(x) if x else 0.0 for x in parts[1:len(self.wavelengths)+1]]
+                
+                # Pad if necessary
+                while len(intensities) < len(self.wavelengths):
+                    intensities.append(0.0)
+                
+                intensity_matrix.append(intensities[:len(self.wavelengths)])
+            except (ValueError, IndexError) as e:
+                debug_print(f"Skipping line due to error: {e}", "DATA")
+                continue
+        
+        if len(timestamps_list) == 0:
+            raise ValueError("No timestamp data found in simple format")
+        if len(intensity_matrix) == 0:
+            raise ValueError("No intensity data found in simple format")
+        
+        timestamps_array = np.array(timestamps_list)
+        debug_print(f"Found {len(timestamps_array)} timestamps", "DATA")
+        debug_print(f"Timestamp range: {timestamps_array.min():.3f} - {timestamps_array.max():.3f}", "DATA")
+        
+        # Normalize timestamps to start at zero
+        self.timestamps = self._normalize_timestamps_to_zero(timestamps_array)
+        debug_print(f"After normalization: {self.timestamps.min():.3f} to {self.timestamps.max():.3f}", "DATA")
+        
+        # Create data matrix (time x wavelength)
+        self.data_matrix = np.array(intensity_matrix)
+        debug_print(f"Data matrix shape: {self.data_matrix.shape}", "DATA")
+        
+        # Sanitize infinity and NaN values
+        num_inf = np.sum(np.isinf(self.data_matrix))
+        num_nan = np.sum(np.isnan(self.data_matrix))
+        
+        if num_inf > 0 or num_nan > 0:
+            debug_print(f"Found {num_inf} inf and {num_nan} NaN values - replacing with 0", "DATA")
+            self.data_matrix = sanitize_array(self.data_matrix, replace_with=0.0)
+        
+        debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
+        debug_print("="*50, "DATA")
+        
+        self.header_info = {"format": "simple"}
         
         return self.data_matrix, self.wavelengths, self.timestamps
 
