@@ -80,6 +80,44 @@ def get_h5_path_from_ipython():
         debug_print(f"Error retrieving h5_path: {e}", "H5")
         return None, False
 
+def sanitize_float(value, default=0.0):
+    """
+    Replace inf/nan with a default value
+    
+    Parameters:
+    -----------
+    value : float
+        Value to sanitize
+    default : float
+        Default value to use if inf/nan
+        
+    Returns:
+    --------
+    float: Sanitized value
+    """
+    if not np.isfinite(value):
+        return default
+    return float(value)
+
+def sanitize_array(arr, replace_with=0.0):
+    """
+    Replace all inf/nan values in array
+    
+    Parameters:
+    -----------
+    arr : array
+        Array to sanitize
+    replace_with : float
+        Value to replace inf/nan with
+        
+    Returns:
+    --------
+    array: Sanitized array
+    """
+    arr = np.where(np.isinf(arr), np.nan, arr)
+    arr = np.where(np.isnan(arr), replace_with, arr)
+    return arr
+
 
 # =============================================================================
 # CSV DATA LOADER
@@ -94,31 +132,66 @@ class CSVDataLoader:
         self.timestamps = None
         self.header_info = {}
 
+    def _normalize_timestamps_to_zero(self, timestamps):
+        """Normalize timestamps to start at zero"""
+        if len(timestamps) == 0:
+            return timestamps
+        
+        first_timestamp = timestamps[0]
+        debug_print(f"Normalizing timestamps - Original range: {timestamps[0]:.3f} - {timestamps[-1]:.3f}", "DATA")
+        
+        normalized_timestamps = timestamps - first_timestamp
+        debug_print(f"Normalized time range: {normalized_timestamps[0]:.3f} - {normalized_timestamps[-1]:.3f}s", "DATA")
+        
+        return normalized_timestamps
+
     def load_data(self, file_content):
-        """
-        Load photoluminescence data from file content
-
-        Expected format:
-        - Metadata lines (key,value pairs)
-        - Row starting with "Wavelength (nm)" followed by time values
-        - Subsequent rows: wavelength,intensity1,intensity2,...
-
-        Parameters:
-        -----------
-        file_content : bytes or memoryview
-            Raw file content from upload
-
-        Returns:
-        --------
-        tuple: (data_matrix, wavelengths, timestamps)
-        """
-        # Convert bytes/memoryview to string
+        """Load photoluminescence data from file content"""
+        debug_print("=="*25, "DATA")
+        debug_print("Starting CSV data load", "DATA")
+        debug_print(f"File content type: {type(file_content)}", "DATA")
+        debug_print(f"File content length: {len(file_content)} bytes", "DATA")
+        
+        # Convert bytes/memoryview to string with encoding detection
         if isinstance(file_content, bytes):
-            content_str = file_content.decode('utf-8')
+            raw_bytes = file_content
         elif isinstance(file_content, memoryview):
-            content_str = file_content.tobytes().decode('utf-8')
+            raw_bytes = file_content.tobytes()
         else:
             content_str = str(file_content)
+            raw_bytes = None
+    
+        if raw_bytes is not None:
+            debug_print(f"First 200 bytes (raw): {raw_bytes[:200]}", "DATA")
+            
+            # Check for BOM to detect encoding
+            if raw_bytes.startswith(b'\xff\xfe'):
+                # UTF-16 LE BOM
+                content_str = raw_bytes.decode('utf-16-le')
+                debug_print("Detected UTF-16 LE encoding (BOM: \\xff\\xfe)", "DATA")
+            elif raw_bytes.startswith(b'\xfe\xff'):
+                # UTF-16 BE BOM
+                content_str = raw_bytes.decode('utf-16-be')
+                debug_print("Detected UTF-16 BE encoding (BOM: \\xfe\\xff)", "DATA")
+            elif raw_bytes.startswith(b'\xef\xbb\xbf'):
+                # UTF-8 BOM
+                content_str = raw_bytes.decode('utf-8-sig')
+                debug_print("Detected UTF-8 encoding with BOM", "DATA")
+            else:
+                # Default to UTF-8
+                try:
+                    content_str = raw_bytes.decode('utf-8')
+                    debug_print("Decoded as UTF-8", "DATA")
+                except UnicodeDecodeError:
+                    # Try UTF-16 without BOM as fallback
+                    try:
+                        content_str = raw_bytes.decode('utf-16')
+                        debug_print("Decoded as UTF-16 (no BOM detected)", "DATA")
+                    except:
+                        raise ValueError("Could not decode file - unsupported encoding")
+        
+        debug_print(f"String length: {len(content_str)} characters", "DATA")
+        debug_print(f"First 200 chars: {content_str[:200]}", "DATA")
 
         # Parse the file
         lines = content_str.strip().split('\n')
@@ -144,7 +217,21 @@ class CSVDataLoader:
         # Filter out empty strings and convert to float
         timestamp_strings = header_parts[1:]
         valid_timestamps = [x.strip() for x in timestamp_strings if x.strip()]
-        self.timestamps = np.array([float(x) for x in valid_timestamps])
+        # Filter out empty strings and convert to float
+        timestamp_strings = header_parts[1:]
+        valid_timestamps = [x.strip() for x in timestamp_strings if x.strip()]
+        
+        debug_print(f"Found {len(valid_timestamps)} valid timestamp strings", "DATA")
+        debug_print(f"First timestamp string: '{valid_timestamps[0]}'", "DATA")
+        debug_print(f"Last timestamp string: '{valid_timestamps[-1]}'", "DATA")
+        
+        timestamps_array = np.array([float(x) for x in valid_timestamps])
+        debug_print(f"Converted to array, shape: {timestamps_array.shape}", "DATA")
+        debug_print(f"Timestamp range: {timestamps_array.min():.3f} to {timestamps_array.max():.3f}", "DATA")
+        
+        # NORMALIZE TIMESTAMPS TO START AT ZERO
+        self.timestamps = self._normalize_timestamps_to_zero(timestamps_array)
+        debug_print(f"After normalization: {self.timestamps.min():.3f} to {self.timestamps.max():.3f}", "DATA")
 
         # Parse data rows
         wavelengths_list = []
@@ -192,10 +279,24 @@ class CSVDataLoader:
 
         self.wavelengths = np.array(wavelengths_list)
         intensity_array = np.array(intensity_matrix)
-
+        
         # Transpose to have time as first dimension (time x wavelength)
         self.data_matrix = intensity_array.T
-
+        
+        debug_print(f"Intensity array shape before transpose: {intensity_array.shape}", "DATA")
+        debug_print(f"Final data_matrix shape: {self.data_matrix.shape}", "DATA")
+        
+        # **CRITICAL: Sanitize infinity and NaN values**
+        num_inf = np.sum(np.isinf(self.data_matrix))
+        num_nan = np.sum(np.isnan(self.data_matrix))
+        
+        if num_inf > 0 or num_nan > 0:
+            debug_print(f"Found {num_inf} inf and {num_nan} NaN values - replacing with 0", "DATA")
+            self.data_matrix = sanitize_array(self.data_matrix, replace_with=0.0)
+        
+        debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
+        debug_print("="*50, "DATA")
+        
         return self.data_matrix, self.wavelengths, self.timestamps
 
     def _extract_metadata(self, metadata_lines):
@@ -431,15 +532,13 @@ class DataManager:
         return self.data_matrix is not None
     
     def get_data_info(self):
-        """
-        Get information about loaded data
-        
-        Returns:
-        --------
-        dict: Data information
-        """
+        """Get information about loaded data"""
         if not self.is_data_loaded():
             return {"status": "No data loaded"}
+        
+        # Use sanitize_float for min/max values
+        data_min = sanitize_float(self.data_matrix.min(), default=0.0)
+        data_max = sanitize_float(self.data_matrix.max(), default=1000.0)
         
         return {
             "status": "Data loaded",
@@ -447,9 +546,9 @@ class DataManager:
             "shape": self.data_matrix.shape,
             "time_points": len(self.timestamps),
             "wavelengths": len(self.wavelengths),
-            "time_range": (self.timestamps.min(), self.timestamps.max()),
-            "wavelength_range": (self.wavelengths.min(), self.wavelengths.max()),
-            "intensity_range": (self.data_matrix.min(), self.data_matrix.max())
+            "time_range": (sanitize_float(self.timestamps.min()), sanitize_float(self.timestamps.max())),
+            "wavelength_range": (sanitize_float(self.wavelengths.min()), sanitize_float(self.wavelengths.max())),
+            "intensity_range": (data_min, data_max)
         }
     
     def get_spectrum_at_time(self, time_idx):

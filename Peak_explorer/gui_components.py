@@ -6,6 +6,8 @@ Creates all individual widgets
 import ipywidgets as widgets
 import config
 from utils import debug_print
+from ipyvuetify.extra import FileInput
+from ipyvuetify.extra.file_input import ClientSideFile
 
 
 class GUIComponents:
@@ -18,7 +20,7 @@ class GUIComponents:
     def create_file_upload_widgets(self):
         """Create file upload related widgets"""
         if self.h5_available:
-            # H5 mode dropdown
+            # H5 mode dropdown (keep as is)
             mode_options = [(v, k) for k, v in config.H5_MODES.items()]
             self.widgets['mode_dropdown'] = widgets.Dropdown(
                 options=mode_options,
@@ -28,27 +30,28 @@ class GUIComponents:
             )
             debug_print("Created H5 mode dropdown", "GUI")
         else:
-            # File upload widget
-            self.widgets['file_upload'] = widgets.FileUpload(
-                accept=config.ACCEPTED_FILE_TYPES,
-                multiple=config.ACCEPT_MULTIPLE_FILES,
-                description='Upload Data'
+            # REPLACE ipywidgets.FileUpload with ipyvuetify FileInput
+            self.widgets['file_upload'] = FileInput(
+                multiple=False,
+                accept='.csv',
+                label='Click to upload CSV file',
+                v_model=[]
             )
-            debug_print("Created file upload widget", "GUI")
+            debug_print("Created ipyvuetify file upload widget", "GUI")
         
-        # Status output
+        # Status output (keep as is)
         self.widgets['status_output'] = widgets.Output()
-
-        # Energy conversion button (only for PL data)
+    
+        # Energy conversion button (keep as is)
         self.widgets['convert_energy_btn'] = widgets.Button(
             description='🔄 nm ↔ eV',
             button_style='info',
             tooltip='Convert between wavelength (nm) and energy (eV)',
             layout=widgets.Layout(width='120px'),
-            disabled=True  # Disabled until PL data is loaded
+            disabled=True
         )
         
-        # Energy unit display
+        # Energy unit display (keep as is)
         self.widgets['energy_unit_display'] = widgets.Label(value="λ (nm)")
         
         debug_print("Created energy conversion widgets", "GUI")

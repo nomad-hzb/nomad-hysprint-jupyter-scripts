@@ -13,9 +13,28 @@ from plot_manager import PlotManager
 from exporters import ResultExporter
 import config
 from utils import debug_print
+from data_manager import DataManager, sanitize_float, sanitize_array
 
 import warnings
 warnings.filterwarnings('ignore', message='Using UFloat objects with std_dev==0')
+
+# Initialize ipyvuetify FileInput (prevent initialization error)
+try:
+    from ipyvuetify.extra import FileInput
+    from ipyvuetify.extra.file_input import ClientSideFile
+    
+    # Create a temporary FileInput to initialize the library
+    temp_file_input = FileInput()
+    temp_file_input.file_info = [{'name': 'test.csv', 'size': 100, 'lastModified': 0, 'type': ''}]
+    try:
+        c = ClientSideFile(temp_file_input, 0, 1)
+        d = c.read()
+    except:
+        pass
+    temp_file_input.file_info = []
+    print("✅ ipyvuetify FileInput initialized")
+except Exception as e:
+    print(f"⚠️ ipyvuetify initialization warning: {e}")
 
 
 # =============================================================================
@@ -388,7 +407,8 @@ class PLAnalysisApp:
         if self.data_manager.is_h5_available():
             self.widgets['mode_dropdown'].observe(self.on_file_upload, names='value')
         else:
-            self.widgets['file_upload'].observe(self.on_file_upload, names='value')
+            #self.widgets['file_upload'].observe(self.on_file_upload, names='value')
+            self.widgets['file_upload'].observe(self.on_file_upload, names='file_info')
         
         # Time control callbacks
         self.widgets['time_slider'].observe(self.on_time_change_slider, names='value')
@@ -617,33 +637,98 @@ class PLAnalysisApp:
     # =========================================================================
     
     def on_file_upload(self, change):
-        """Handle file upload or H5 mode change"""
-        if not change['new'] and not self.data_manager.is_h5_available():
-            return
+        """Handle file upload - works with both ipyvuetify and ipywidgets"""
+        debug_print("!!! CALLBACK TRIGGERED !!!", "APP")
+        import sys
+        sys.stdout.flush()
         
         try:
-            with self.widgets['status_output']:
-                self.widgets['status_output'].clear_output()
-                print("Loading data...")
+            debug_print("="*50, "APP")
+            debug_print("File upload triggered", "APP")
             
-            # Load data
+            # Handle H5 mode
             if self.data_manager.is_h5_available():
                 mode = self.widgets['mode_dropdown'].value
+                with self.widgets['status_output']:
+                    self.widgets['status_output'].clear_output()
+                    print("Loading data from H5...")
+                
                 self.data_manager.load_from_h5(mode)
-            else:
-                uploaded_files = change['new']
-                if not uploaded_files:
+                self.update_ui_after_data_load()
+                self.update_visualizations(update_heatmap=True)
+                
+                data_info = self.data_manager.get_data_info()
+                with self.widgets['status_output']:
+                    self.widgets['status_output'].clear_output()
+                    print(f"✅ Successfully loaded data!")
+                    print(f"📊 {data_info['time_points']} time points, {data_info['wavelengths']} wavelengths")
+                    print(f"⏱️ Time range: {data_info['time_range'][0]:.3f} - {data_info['time_range'][1]:.3f} s")
+                    print(f"🌈 Wavelength range: {data_info['wavelength_range'][0]:.1f} - {data_info['wavelength_range'][1]:.1f} nm")
+                return
+            
+            # Handle ipyvuetify FileInput
+            debug_print(f"Change type: {type(change)}", "APP")
+            debug_print(f"Change keys: {change.keys() if isinstance(change, dict) else 'not a dict'}", "APP")
+            
+            # Get files from ipyvuetify FileInput
+            file_data_list = self.widgets['file_upload'].get_files()
+            
+            debug_print(f"File data list type: {type(file_data_list)}", "APP")
+            debug_print(f"File data list length: {len(file_data_list) if file_data_list else 0}", "APP")
+            
+            if not file_data_list or len(file_data_list) == 0:
+                debug_print("No files in upload", "APP")
+                return
+            
+            # Get first file
+            file_data = file_data_list[0]
+            
+            debug_print(f"File data type: {type(file_data)}", "APP")
+            debug_print(f"File data keys: {file_data.keys() if isinstance(file_data, dict) else 'not a dict'}", "APP")
+            
+            # Extract filename and content
+            if isinstance(file_data, dict):
+                filename = file_data.get('name', 'unknown')
+                debug_print(f"Filename: {filename}", "APP")
+                
+                # Read file content
+                if 'file_obj' in file_data:
+                    file_content = file_data['file_obj'].read()
+                    debug_print(f"File content type: {type(file_content)}", "APP")
+                    debug_print(f"File content length: {len(file_content)}", "APP")
+                    
+                    # Show first 100 bytes for debugging
+                    if isinstance(file_content, (bytes, memoryview)):
+                        debug_print(f"First 100 bytes: {bytes(file_content[:100])}", "APP")
+                else:
+                    debug_print("No 'file_obj' in file_data", "APP")
+                    with self.widgets['status_output']:
+                        self.widgets['status_output'].clear_output()
+                        print("❌ Error: Could not read file content")
                     return
-                uploaded_file = uploaded_files[0]
-                file_content = uploaded_file['content']
-                self.data_manager.load_from_file(file_content)
+            else:
+                debug_print(f"Unexpected file_data structure: {file_data}", "APP")
+                return
+            
+            # Load the data
+            with self.widgets['status_output']:
+                self.widgets['status_output'].clear_output()
+                print(f"Loading {filename}...")
+            
+            debug_print("About to call data_manager.load_from_file", "APP")
+            self.data_manager.load_from_file(file_content)
+            debug_print("Data loaded successfully", "APP")
             
             # Update UI controls with loaded data
+            debug_print("Updating UI after data load", "APP")
             self.update_ui_after_data_load()
+            debug_print("UI updated after data load", "APP")
             
             # Initial visualization
+            debug_print("Updating visualizations", "APP")
             self.update_visualizations(update_heatmap=True)
-
+            debug_print("Visualizations updated", "APP")
+    
             # Initialize wavelength range visualization if not at borders
             wavelength_range = self.widgets['wavelength_range_slider'].value
             wl_min, wl_max = self.data_manager.wavelengths.min(), self.data_manager.wavelengths.max()
@@ -654,17 +739,17 @@ class PLAnalysisApp:
             data_info = self.data_manager.get_data_info()
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
-                print(f"✅ Successfully loaded data!")
+                print(f"✅ Successfully loaded {filename}!")
                 print(f"📊 {data_info['time_points']} time points, {data_info['wavelengths']} wavelengths")
                 print(f"⏱️ Time range: {data_info['time_range'][0]:.3f} - {data_info['time_range'][1]:.3f} s")
                 print(f"🌈 Wavelength range: {data_info['wavelength_range'][0]:.1f} - {data_info['wavelength_range'][1]:.1f} nm")
-
+    
             # Enable energy conversion button for PL data
             if self.data_manager.data_source == 'csv' or (self.data_manager.h5_mode in ['pl_raw', 'pl_binned']):
                 self.widgets['convert_energy_btn'].disabled = False
             else:
                 self.widgets['convert_energy_btn'].disabled = True
-                
+                    
         except Exception as e:
             import traceback
             with self.widgets['status_output']:
@@ -672,7 +757,8 @@ class PLAnalysisApp:
                 print(f"❌ Error loading file: {str(e)}")
                 print("\n🔍 Full traceback:")
                 print(traceback.format_exc())
-            debug_print(f"Error loading data: {e}", "APP")
+            debug_print(f"ERROR: {e}", "APP")
+            debug_print(f"Full traceback:\n{traceback.format_exc()}", "APP")
     
     def update_ui_after_data_load(self):
         """Update UI controls after data is loaded"""
@@ -724,8 +810,26 @@ class PLAnalysisApp:
         self.widgets['wavelength_range_slider'].disabled = False
 
         # Enable colorbar controls
-        data_min = float(self.data_manager.data_matrix.min())
-        data_max = float(self.data_manager.data_matrix.max())
+        data_min = sanitize_float(self.data_manager.data_matrix.min(), default=0.0)
+        data_max = sanitize_float(self.data_manager.data_matrix.max(), default=1000.0)
+        
+        # Ensure min < max
+        if data_min >= data_max:
+            data_max = data_min + 1000.0
+            
+        # Set colorbar range
+        # Set max first if increasing range
+        if data_max > self.widgets['colorbar_range_slider'].max:
+            self.widgets['colorbar_range_slider'].max = data_max
+            self.widgets['colorbar_range_slider'].min = data_min
+        else:
+            self.widgets['colorbar_range_slider'].min = data_min
+            self.widgets['colorbar_range_slider'].max = data_max
+            
+        self.widgets['colorbar_range_slider'].value = (data_min, data_max)
+        self.widgets['colorbar_range_slider'].disabled = False
+        self.widgets['colorbar_apply_btn'].disabled = False
+
         # Set min and max carefully to avoid min > max error
         if data_min < data_max:
             # Set max first if increasing range
