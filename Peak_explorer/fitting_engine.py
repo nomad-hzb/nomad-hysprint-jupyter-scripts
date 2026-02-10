@@ -950,7 +950,7 @@ class FittingEngine:
             offset_results = {}
             for idx, result in results.items():
                 offset_results[idx + start_idx] = result
-            self.fitting_results.update(offset_results)
+            self.fitting_results = offset_results  # Replace, don't merge!
         else:
             self.fitting_results = results
         
