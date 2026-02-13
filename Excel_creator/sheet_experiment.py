@@ -1,5 +1,6 @@
 from openpyxl.styles import Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 TABLEAU_COLORS = {
     'tab:blue': '1F77B4',
@@ -31,7 +32,51 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
     start_col = 1
     incremental_number = 0
 
-    def make_label(label, test_val=None):
+    def make_label(label, test_val=None, dropdown_key=None):
+        """
+        Create a label with optional test value or dropdown options.
+        
+        Args:
+            label: The column header label
+            test_val: Test value (if is_testing=True) or list of dropdown options
+            dropdown_key: Optional key to lookup dropdown options from dropdown_options.py
+        
+        Returns:
+            - Just label string if not testing and no dropdown
+            - (label, test_val) tuple if testing
+            - (label, test_val, dropdown_options) tuple if dropdown is specified
+        """
+        # Import dropdown options if needed
+        dropdown_options = None
+        if dropdown_key:
+            try:
+                from dropdown_options import get_dropdown_options
+                dropdown_options = get_dropdown_options(dropdown_key)
+            except ImportError:
+                pass
+        
+        # If test_val is a list, treat it as dropdown options
+        if isinstance(test_val, list):
+            dropdown_options = test_val
+            # Use first option as default test value
+            default_test = test_val[0] if test_val else None
+            if is_testing:
+                return (label, default_test, dropdown_options)
+            else:
+                return (label, None, dropdown_options)
+        
+        # If dropdown_key provided, get options from config file
+        if dropdown_options:
+            default_test = dropdown_options[0] if dropdown_options else None
+            if is_testing:
+                if test_val is not None:
+                    return (label, test_val, dropdown_options)
+                else:
+                    return (label, default_test, dropdown_options)
+            else:
+                return (label, None, dropdown_options)
+        
+        # Standard behavior (no dropdown)
         if is_testing:
             if test_val is not None:
                 return (label, test_val)
@@ -89,6 +134,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
             for i in range(1, config.get('solvents', 0) + 1):
                 steps.extend(
                     [
+                        make_label('Datetime', '09.01.2026 10:19:00'),
+                        make_label('Operator', 'MaxMustermann'),
                         make_label(f'Solvent {i}', 'Hellmanex'),
                         make_label(f'Time {i} [s]', 30 + i),
                         make_label(f'Temperature {i} [°C]', 60 + i),
@@ -101,17 +148,25 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                         make_label('Gas-Plasma Gas', 'Oxygen'),
                         make_label('Gas-Plasma Time [s]', 180),
                         make_label('Gas-Plasma Power [W]', 50),
+                        make_label('Notes', 'Test cleaning'),
                     ]
                 )
             if process_name == 'Cleaning UV-Ozone':
-                steps.append(make_label('UV-Ozone Time [s]', 900))
+                steps.extend(
+                    [
+                        make_label('UV-Ozone Time [s]', 900),
+                        make_label('Notes', 'Test cleaning')
+                    ])
             return steps
 
-        if process_name in ['Spin Coating', 'Dip Coating', 'Slot Die Coating', 'Inkjet Printing']:
+        if process_name in ['Spin Coating', 'Dip Coating', 'Slot Die Coating', 'Inkjet Printing', 'Blade Coating']:
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Material name', 'Cs0.05(MA0.17FA0.83)0.95Pb(I0.83Br0.17)3'),
                 make_label('Layer type', 'Absorber'),
                 make_label('Tool/GB name', 'HZB-HySprintBox'),
+                make_label('Layer thickness [nm]', 100),
             ]
 
             # Add solvent steps
@@ -209,7 +264,44 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                 )
 
             elif process_name == 'Dip Coating':
-                steps.append(make_label('Dipping duration [s]', 15))
+                steps.extend(
+                    [
+                        make_label('Dipping duration [s]', 15),
+                    ]
+                )
+
+            elif process_name == 'Blade Coating':
+                steps.extend(
+                    [
+                        make_label('Solution volume [uL]', 100),
+                        make_label('Viscosity [mPa*s]', 120),
+                        make_label('Contact angle [°]', 45),
+                        make_label('Blade Speed [mm/s]', 15),
+                        make_label('Dispensed Ink Volume [uL]', 100),
+                        make_label('Blade Gap [um]', 300),
+                        make_label('Blade Size', 25),
+                        make_label('Coating Width [mm]', 20),
+                        make_label('Coating Length [mm]', 70),
+                        make_label('Dead Length [mm]', 40),
+                        make_label('Bed Temperature [°C]', 25),
+                        make_label('Ink Temperature [°C]', 25),
+                    ]
+                )
+                
+                if config.get('gasquenching', False):
+                    steps.extend(
+                        [
+                            make_label('Gas', 'Nitrogen'),
+                            make_label('Gas quenching start time [s]', 5),
+                            make_label('Gas quenching duration [s]', 15),
+                            make_label('Gas quenching flow rate [ml/s]', 20),
+                            make_label('Gas quenching pressure [bar]', 1.2),
+                            make_label('Gas quenching velocity [m/s]', 2.5),
+                            make_label('Gas quenching height [mm]', 10),
+                            make_label('Nozzle shape', 'Round'),
+                            make_label('Nozzle size [mm²]', 3),
+                        ]
+                    )
 
             elif process_name == 'Inkjet Printing':
                 steps.extend(
@@ -235,8 +327,9 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                         make_label('Nozzle temperature [°C]', 35),
                         make_label('Nozzle voltage config file', "testfile.txt"),
                         make_label('Image used', "Square inch 300 dpi"),
-                        make_label('rel. humidity [%]', 45),
+                        #make_label('rel. humidity [%]', 45),
                     ]
+                    
                 )
 
                 if config.get('gavd', False):
@@ -251,7 +344,7 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                             make_label('Gas flow pressure [mbar]', 100),
                             make_label('Nozzle shape', 'round'),
                             make_label('Nozzle type', 'mesh'),
-                            make_label('GAVD comment', 'blabla'),
+                            make_label('GAVD comment', 'GAVD Note'),
                         ]
                     )
 
@@ -261,7 +354,7 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                     make_label('Annealing time [min]', 30),
                     make_label('Annealing temperature [°C]', 120),
                     make_label('Annealing atmosphere', 'Nitrogen'),
-                    make_label('Notes', 'Test annealing'),
+                    make_label('Notes', 'Process notes'),
                 ]
             )
 
@@ -270,10 +363,13 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
         # PVD Processes
         if process_name == 'Evaporation' or process_name == 'Sublimation':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Material name', 'PCBM'),
                 make_label('Layer type', 'Electron Transport Layer'),
                 make_label('Tool/GB name', 'Hysprint Evap'),
                 make_label('Organic', True),
+                make_label('Sample holder width [mm]', '25'),
                 make_label('Base pressure [bar]', 1e-6),
                 make_label('Pressure start [bar]', 5e-6),
                 make_label('Pressure end [bar]', 3e-6),
@@ -291,6 +387,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
         # if process_name == 'Seq-Evaporation' or process_name == 'Co-Evaporation':
         if process_name == 'Co-Evaporation':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Material name', 'Aluminium'),
                 make_label('Layer type', 'Electrode'),
                 make_label('Tool/GB name', 'IRIS Evap'),
@@ -317,6 +415,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
 
         if process_name == 'Sputtering':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Material name', 'TiO2'),
                 make_label('Layer type', 'Electron Transport Layer'),
                 make_label('Tool/GB name', 'Hysprint tool'),
@@ -329,12 +429,14 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                 make_label('Rotation rate [rpm]', 30),
                 make_label('Thickness [nm]', 50),
                 make_label('Gas flow rate [cm^3/min]', 20),
-                make_label('Notes', 'Test Sputtering'),
+                make_label('Notes', 'Notes Sputtering'),
             ]
             return steps
 
         if process_name == 'Laser Scribing':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Laser wavelength [nm]', 532),
                 make_label('Laser pulse time [ps]', 8),
                 make_label('Laser pulse frequency [kHz]', 80),
@@ -351,6 +453,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
 
         if process_name == 'ALD':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Material name', 'Al2O3'),
                 make_label('Layer type', 'Electron Transport Layer'),
                 make_label('Tool/GB name', 'IRIS ALD'),
@@ -367,11 +471,14 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                 make_label('Precursor 2 (Oxidizer/Reducer)', 'H2O'),
                 make_label('Pulse duration 2 [s]', 0.1),
                 make_label('Manifold temperature 2 [°C]', 70),
+                make_label('Notes', "ALD Note"),
             ]
             return steps
 
         if process_name == 'Annealing':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Annealing time [min]', 60),
                 make_label('Annealing temperature [°C]', 150),
                 make_label('Annealing athmosphere', 'Nitrogen'),
@@ -382,6 +489,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
 
         if process_name == 'Generic Process':
             steps = [
+                make_label('Datetime', '09.01.2026 10:19:00'),
+                make_label('Operator', 'MaxMustermann'),
                 make_label('Name', 'Test Generic Process'),
                 make_label('Notes', 'This is a test generic process'),
             ]
@@ -392,6 +501,8 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
             # Ink Preparation steps
             for i in range(1, config.get('solvents', 0) + 1):
                 steps.extend([
+                    make_label('Datetime', '09.01.2026 10:19:00'),
+                    make_label('Operator', 'MaxMustermann'),
                     make_label(f'Solvent {i} name', f'DMF {i}'),
                     make_label(f'Solvent {i} volume [ml]', 10 * i),
                 ])
@@ -442,6 +553,21 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
         color_index = incremental_number % len(colors)
         cell_color = colors[color_index]
         steps = generate_steps_for_process(process_name, custom_config)
+        
+        # Append atmospheric values if requested (for all processes except Experiment Info)
+        if process_name != 'Experiment Info' and custom_config.get('add_atmospheric', False):
+            atmospheric_steps = [
+                make_label('Room temperature [°C]', 21),
+                make_label('rel. humidity [%]', '30'),
+                make_label('GB start oxygen level [ppm]', 0.1),
+                make_label('GB end oxygen level [ppm]', 0.1),
+                make_label('GB start water level [ppm]', 0.1),
+                make_label('GB end water level [ppm]', 0.1),
+                make_label('GB start temperature [°C]', 0.1),
+                make_label('GB end temperature [°C]', 0.1),
+            ]
+            steps.extend(atmospheric_steps)
+        
         step_count = len(steps)
         end_col = start_col + step_count - 1
 
@@ -454,21 +580,62 @@ def add_experiment_sheet(workbook, process_sequence, is_testing=False):
                        end_row=1, end_column=end_col)
         cell = ws.cell(row=1, column=start_col)
         cell.value = process_label
-        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.alignment = Alignment(horizontal='left', vertical='center')
         cell.fill = PatternFill(start_color=cell_color,
                                 end_color=cell_color, fill_type='solid')
 
         row2_color = lighten_color(cell_color)
         for i, step_item in enumerate(steps):
             col_index = start_col + i
+            
+            # Handle different step_item formats
+            has_dropdown = False
+            dropdown_options = None
+            
             if isinstance(step_item, tuple):
-                step_label, test_val = step_item
-                cell = ws.cell(row=2, column=col_index)
-                cell.value = step_label
-                cell.fill = PatternFill(start_color=row2_color,
-                                        end_color=row2_color, fill_type='solid')
-                if is_testing:
-                    ws.cell(row=3, column=col_index, value=test_val)
+                if len(step_item) == 3:
+                    # (label, test_val, dropdown_options)
+                    step_label, test_val, dropdown_options = step_item
+                    has_dropdown = True
+                elif len(step_item) == 2:
+                    # (label, test_val)
+                    step_label, test_val = step_item
+                else:
+                    step_label = step_item[0]
+                    test_val = None
+            else:
+                # Just a label string
+                step_label = step_item
+                test_val = None
+            
+            # Write the label in row 2
+            cell = ws.cell(row=2, column=col_index)
+            cell.value = step_label
+            cell.fill = PatternFill(start_color=row2_color,
+                                    end_color=row2_color, fill_type='solid')
+            
+            # Write test value if testing mode
+            if is_testing and test_val is not None:
+                ws.cell(row=3, column=col_index, value=test_val)
+            
+            # Apply dropdown data validation if options provided
+            if has_dropdown and dropdown_options:
+                # Create comma-separated list for Excel validation
+                options_str = ','.join([str(opt) for opt in dropdown_options])
+                
+                # Create data validation
+                dv = DataValidation(type="list", formula1=f'"{options_str}"', allow_blank=True)
+                dv.error = 'Please select from the dropdown list'
+                dv.errorTitle = 'Invalid Entry'
+                dv.prompt = 'Select from the list'
+                dv.promptTitle = 'Dropdown Selection'
+                
+                # Add validation to worksheet
+                ws.add_data_validation(dv)
+                
+                # Apply to entire column (rows 3-1000)
+                col_letter = get_column_letter(col_index)
+                dv.add(f'{col_letter}3:{col_letter}1000')
         start_col = end_col + 1
         incremental_number += 1
 
