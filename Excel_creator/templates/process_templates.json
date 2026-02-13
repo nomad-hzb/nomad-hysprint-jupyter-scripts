@@ -166,19 +166,20 @@
       "category": "Test Processes",
       "process_sequence": [
         {"process": "Experiment Info"},
-        {"process": "Laser Scribing"},
+        {"process": "ALD"},
+        {"process": "Blade Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "vacuumquenching": true}},
         {"process": "Cleaning O2-Plasma", "config": {"solvents": 2}},
         {"process": "Cleaning UV-Ozone"},
         {"process": "Dip Coating"},
+        {"process": "Evaporation", "config": {"carbon_paste": true}},
+        {"process": "Generic Process"},
+        {"process": "Inkjet Printing", "config": {"solvents": 1, "solutes": 1, "annealing": true, "gavd": true}},
+        {"process": "Laser Scribing"},
+        {"process": "Slot Die Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "vacuumquenching": true}},
         {"process": "Spin Coating", "config": {"solvents": 2, "solutes": 2, "spinsteps": 2, "antisolvent": true}},
         {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "vacuumquenching": true}},
         {"process": "Spin Coating", "config": {"solvents": 1, "solutes": 1, "spinsteps": 1, "gasquenching": true}},
-        {"process": "Slot Die Coating"},
-        {"process": "Inkjet Printing", "config": {"annealing": true, "gavd": true}},
-        {"process": "Evaporation", "config": {"carbon_paste": true}},
-        {"process": "Sputtering"},
-        {"process": "ALD"},
-        {"process": "Generic Process"}
+        {"process": "Sputtering"}
       ]
     }
   }
