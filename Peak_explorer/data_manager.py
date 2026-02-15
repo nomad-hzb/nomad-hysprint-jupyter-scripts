@@ -43,8 +43,8 @@ def get_axes_from_extent(extent, data):
     debug_print("Calculating axes from extent", "H5")
     [xmin, xmax, ymin, ymax] = extent
     nrows, ncols = data.shape
-    xaxes = np.linspace(xmin, xmax, ncols)
-    yaxes = np.linspace(ymin, ymax, nrows)
+    xaxes = np.linspace(xmin, xmax, nrows)
+    yaxes = np.linspace(ymin, ymax, ncols)
     return xaxes, yaxes
 
 
