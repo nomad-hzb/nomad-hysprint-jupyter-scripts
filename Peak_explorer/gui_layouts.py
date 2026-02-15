@@ -1088,7 +1088,7 @@ class PLAnalysisApp:
                 success = self.data_manager.convert_wavelengths_to_angstrom()
                 if success:
                     self.wavelength_unit = 'angstrom'
-                    self.widgets['unit_display'].value = "Unit: Å"
+                    self.widgets['unit_display'].value = "Current unit: Å"
                     
                     # Update wavelength range slider
                     wl_min = float(self.data_manager.wavelengths.min())
@@ -1104,6 +1104,9 @@ class PLAnalysisApp:
                     self.widgets['wavelength_range_slider'].value = new_range
                     self.widgets['wavelength_range_slider'].min = wl_min
                     self.widgets['wavelength_range_slider'].max = wl_max
+
+                    # change label
+                    self.widgets['wavelength_range_slider'].description = 'λ Range (Å):'
                     
                     with self.widgets['status_output']:
                         self.widgets['status_output'].clear_output()
@@ -1115,7 +1118,7 @@ class PLAnalysisApp:
                 success = self.data_manager.convert_wavelengths_to_nm()
                 if success:
                     self.wavelength_unit = 'nm'
-                    self.widgets['unit_display'].value = "Unit: nm"
+                    self.widgets['unit_display'].value = "Current unit: nm"
                     
                     # Update wavelength range slider
                     wl_min = float(self.data_manager.wavelengths.min())
@@ -1131,6 +1134,9 @@ class PLAnalysisApp:
                     self.widgets['wavelength_range_slider'].value = new_range
                     self.widgets['wavelength_range_slider'].min = wl_min
                     self.widgets['wavelength_range_slider'].max = wl_max
+
+                    # change label
+                    self.widgets['wavelength_range_slider'].description = 'λ Range (nm):'
                     
                     with self.widgets['status_output']:
                         self.widgets['status_output'].clear_output()
@@ -1139,7 +1145,7 @@ class PLAnalysisApp:
             else:
                 # If currently in eV, go back to nm
                 self.wavelength_unit = 'nm'
-                self.widgets['unit_display'].value = "Unit: nm"
+                self.widgets['unit_display'].value = "Current unit: nm"
                 with self.widgets['status_output']:
                     self.widgets['status_output'].clear_output()
                     print(f"✅ Changed to nanometers (nm)")
