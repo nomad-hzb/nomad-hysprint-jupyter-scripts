@@ -43,8 +43,8 @@ def get_axes_from_extent(extent, data):
     debug_print("Calculating axes from extent", "H5")
     [xmin, xmax, ymin, ymax] = extent
     nrows, ncols = data.shape
-    xaxes = np.linspace(xmin, xmax, ncols)
-    yaxes = np.linspace(ymin, ymax, nrows)
+    xaxes = np.linspace(xmin, xmax, nrows)
+    yaxes = np.linspace(ymin, ymax, ncols)
     return xaxes, yaxes
 
 
@@ -65,7 +65,7 @@ def get_h5_path_from_ipython():
         
         if ipython is not None:
             # Execute the magic command
-            ipython.magic('store -r h5_path')
+            ipython.run_line_magic('store', '-r h5_path')
             
             # Try to access the variable from user namespace
             if 'h5_path' in ipython.user_ns:
@@ -494,7 +494,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -527,6 +527,16 @@ class H5DataLoader:
                 timestamps = f[config.H5_PATHS['giwaxs']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['giwaxs']['data']][()]
                 wavelengths = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0] / 10
+
+            elif mode == "transmission_raw":
+                timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
+                wavelengths = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
+
+            elif mode == "transmission_binned":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, wavelengths = get_axes_from_extent(extent, data_matrix)
                 
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
@@ -537,6 +547,8 @@ class H5DataLoader:
             timestamps = timestamps[:-1]
         
         debug_print(f"Loaded H5 data: {data_matrix.shape}, {len(wavelengths)} wavelengths, {len(timestamps)} times", "H5")
+        debug_print(f"Wavelength range: {wavelengths.min():.2f} - {wavelengths.max():.2f} nm", "H5")
+        debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
         
         return data_matrix, wavelengths, timestamps
 

@@ -10,6 +10,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
 from utils import debug_print
+from packaging import version
 
 
 class Plotter:
@@ -41,13 +42,20 @@ class Plotter:
         """
         fig = go.Figure()
 
+        import plotly
+
+        if version.parse(plotly.__version__) < version.parse("4.8"):
+            colorbar_cfg = dict(title='Intensity', titleside='right')
+        else:
+            colorbar_cfg = dict(title=dict(text='Intensity', side='right'))
+
         # Create heatmap
         fig.add_trace(go.Heatmap(
             z=data_matrix.T,  # Transpose to have wavelength on y-axis
             x=timestamps,
             y=wavelengths,
             colorscale=self.colorscale,
-            colorbar=dict(title="Intensity", titleside="right"),
+            colorbar=colorbar_cfg,
             hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}}s<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
             name="PL Data"
         ))
@@ -502,8 +510,68 @@ class PlotManager:
         self.spectrum_fig = go.FigureWidget(fig)
         
         return self.spectrum_fig
+
+    def create_single_plotly_figure(self, peak_ids, df, column_suffix, wavelength_unit='nm'):
+        fig = go.Figure()
+        for i, peak_id in enumerate(peak_ids):
+            selected_column = f'{peak_id}_{column_suffix}'
+
+            if column_suffix == "amplitude":
+                column_suffix = "Area"
+
+            if selected_column in df.columns:
+                # Prepare custom_data with both index and time
+                custom_data = np.column_stack((df['index'].values, df['time'].values))
+
+                if i == 0:
+                    # First trace shows Time Index and Time
+                    fig.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[selected_column],
+                        mode='lines+markers',
+                        name=f'{peak_id} center',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        customdata=custom_data,
+                        hovertemplate="<b>Time Index: %{custom_data[0]}</b><br>Time: %{custom_data[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
+                    ))
+                else:
+                    # Other traces just show their value
+                    fig.add_trace(go.Scatter(
+                        x=df['time'],
+                        y=df[selected_column],
+                        mode='lines+markers',
+                        name=f'{peak_id} center',
+                        line=dict(width=2),
+                        marker=dict(size=6),
+                        hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
+                    ))
+
+        if column_suffix == "center" or column_suffix == "fwhm":
+            y_axis_title = f"{column_suffix} ({wavelength_unit})"
+        else:
+            y_axis_title = column_suffix
+
+        fig.update_layout(
+            title=f"{column_suffix} vs Time",
+            xaxis_title="Time (s)",
+            yaxis_title=y_axis_title,
+            height=400,
+            template='plotly_white',
+            xaxis=dict(showgrid=True, gridcolor='lightgray'),
+            yaxis=dict(showgrid=True, gridcolor='lightgray'),
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02
+            ),
+            hovermode='x unified'
+        )
+        return fig
     
-    def create_time_series_plots(self, fitting_results, output_widget=None):
+    def create_time_series_plots(self, fitting_results, output_widget=None, wavelength_unit='nm'):
         """
         Create time series plots from fitting results
         
@@ -513,6 +581,7 @@ class PlotManager:
             Dictionary of fitting results
         output_widget : ipywidgets.Output, optional
             Output widget to display plots
+        wavelength_unit : str, optional
             
         Returns:
         --------
@@ -538,108 +607,26 @@ class PlotManager:
         peak_ids.sort()  # Sort to ensure consistent order
         
         # Plot 1: Peak centers vs time
-        fig_centers = go.Figure()
-        for i, peak_id in enumerate(peak_ids):
-            center_col = f'{peak_id}_center'
-            if center_col in df.columns:
-                # Prepare customdata with both index and time
-                customdata = np.column_stack((df['index'].values, df['time'].values))
-                
-                if i == 0:
-                    # First trace shows Time Index and Time
-                    fig_centers.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[center_col],
-                        mode='lines+markers',
-                        name=f'{peak_id} center',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        customdata=customdata,
-                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
-                    ))
-                else:
-                    # Other traces just show their value
-                    fig_centers.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[center_col],
-                        mode='lines+markers',
-                        name=f'{peak_id} center',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
-                    ))
-        
-        fig_centers.update_layout(
-            title="Peak Centers vs Time",
-            xaxis_title="Time (s)",
-            yaxis_title="Center (nm)",
-            height=400,
-            template='plotly_white',
-            xaxis=dict(showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(showgrid=True, gridcolor='lightgray'),
-            legend=dict(
-                orientation="v",
-                yanchor="top",
-                y=1,
-                xanchor="left",
-                x=1.02
-            ),
-            hovermode='x unified'
-        )
+        fig_centers = self.create_single_plotly_figure(peak_ids, df, column_suffix='center',
+                                                       wavelength_unit=wavelength_unit)
         figures.append(fig_centers)
+
+        # Plot 2: Peak areas vs time
+        fig_areas = self.create_single_plotly_figure(peak_ids, df, column_suffix='amplitude',
+                                                     wavelength_unit=wavelength_unit)
+        figures.append(fig_areas)
+
+        # Plot 3: FWHM vs time
+        fig_fwhm = self.create_single_plotly_figure(peak_ids, df, column_suffix='fwhm',
+                                                    wavelength_unit=wavelength_unit)
+        figures.append(fig_fwhm)
         
-        # Plot 2: Peak heights vs time
-        fig_heights = go.Figure()
-        for i, peak_id in enumerate(peak_ids):
-            height_col = f'{peak_id}_height'
-            if height_col in df.columns:
-                # Prepare customdata with both index and time
-                customdata = np.column_stack((df['index'].values, df['time'].values))
-                
-                if i == 0:
-                    # First trace shows Time Index and Time
-                    fig_heights.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[height_col],
-                        mode='lines+markers',
-                        name=f'{peak_id} height',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        customdata=customdata,
-                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.0f}<extra></extra>"
-                    ))
-                else:
-                    # Other traces just show their value
-                    fig_heights.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[height_col],
-                        mode='lines+markers',
-                        name=f'{peak_id} height',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        hovertemplate="%{fullData.name}: %{y:.0f}<extra></extra>"
-                    ))
-        
-        fig_heights.update_layout(
-            title="Peak Heights vs Time",
-            xaxis_title="Time (s)",
-            yaxis_title="Height",
-            height=400,
-            template='plotly_white',
-            xaxis=dict(showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(showgrid=True, gridcolor='lightgray'),
-            legend=dict(
-                orientation="v",
-                yanchor="top",
-                y=1,
-                xanchor="left",
-                x=1.02
-            ),
-            hovermode='x unified'
-        )
+        # Plot 4: Peak heights vs time
+        fig_heights = self.create_single_plotly_figure(peak_ids, df, column_suffix='height',
+                                                       wavelength_unit=wavelength_unit)
         figures.append(fig_heights)
         
-        # Plot 3: R-squared vs time
+        # Plot 5: R-squared vs time
         if 'r_squared' in df.columns:
             fig_quality = go.Figure()
             
