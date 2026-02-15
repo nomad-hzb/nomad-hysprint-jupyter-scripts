@@ -10,6 +10,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from plotly.colors import qualitative
 from utils import debug_print
+from packaging import version
 
 
 class Plotter:
@@ -41,13 +42,20 @@ class Plotter:
         """
         fig = go.Figure()
 
+        import plotly
+
+        if version.parse(plotly.__version__) < version.parse("4.8"):
+            colorbar_cfg = dict(title='Intensity', titleside='right')
+        else:
+            colorbar_cfg = dict(title=dict(text='Intensity', side='right'))
+
         # Create heatmap
         fig.add_trace(go.Heatmap(
             z=data_matrix.T,  # Transpose to have wavelength on y-axis
             x=timestamps,
             y=wavelengths,
             colorscale=self.colorscale,
-            colorbar=dict(title="Intensity", titleside="right"),
+            colorbar=colorbar_cfg,
             hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}}s<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
             name="PL Data"
         ))

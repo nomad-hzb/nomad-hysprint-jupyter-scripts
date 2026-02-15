@@ -6,7 +6,7 @@ Configuration settings for Photoluminescence Analysis App
 # =============================================================================
 # DEBUG SETTINGS
 # =============================================================================
-DEBUG_MODE = False  # Set to True to enable debug output throughout the app
+DEBUG_MODE = True  # Set to True to enable debug output throughout the app
 
 # =============================================================================
 # UI SETTINGS

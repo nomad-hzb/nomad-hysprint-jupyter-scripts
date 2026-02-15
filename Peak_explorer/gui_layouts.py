@@ -762,10 +762,11 @@ class PLAnalysisApp:
     
     def update_ui_after_data_load(self):
         """Update UI controls after data is loaded"""
-        debug_print("Updating UI after data load", "APP")
+        debug_print("Updating UI after data load", "update_ui_after_data_load")
         
         # Get time range
         min_idx, max_idx = self.data_manager.get_time_range()
+        debug_print(f"Time range indices: min={min_idx}, max={max_idx}", "update_ui_after_data_load")
         
         # Update time controls
         self.widgets['time_slider'].max = max_idx
@@ -800,9 +801,12 @@ class PLAnalysisApp:
         self.widgets['peak_prominence'].disabled = False
         self.widgets['peak_distance'].disabled = False
 
-        # Enable wavelength range controls
+        # Get wavelength range
         wavelength_min = float(self.data_manager.wavelengths.min())
         wavelength_max = float(self.data_manager.wavelengths.max())
+        debug_print(f"Wavelength range: min={wavelength_min}, max={wavelength_max}", "update_ui_after_data_load")
+
+        # Enable wavelength range controls
         self.widgets['wavelength_range_slider'].max = 1e12
         self.widgets['wavelength_range_slider'].min = wavelength_min
         self.widgets['wavelength_range_slider'].max = wavelength_max
@@ -848,7 +852,7 @@ class PLAnalysisApp:
         self.widgets['colorbar_range_slider'].disabled = False
         self.widgets['colorbar_apply_btn'].disabled = False
         
-        debug_print("UI updated after data load", "APP")
+        debug_print("UI updated after data load", "update_ui_after_data_load")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
         """Update only the wavelength range lines on spectrum plot"""

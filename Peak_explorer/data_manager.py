@@ -65,7 +65,7 @@ def get_h5_path_from_ipython():
         
         if ipython is not None:
             # Execute the magic command
-            ipython.magic('store -r h5_path')
+            ipython.run_line_magic('store', '-r h5_path')
             
             # Try to access the variable from user namespace
             if 'h5_path' in ipython.user_ns:
@@ -537,6 +537,8 @@ class H5DataLoader:
             timestamps = timestamps[:-1]
         
         debug_print(f"Loaded H5 data: {data_matrix.shape}, {len(wavelengths)} wavelengths, {len(timestamps)} times", "H5")
+        debug_print(f"Wavelength range: {wavelengths.min():.2f} - {wavelengths.max():.2f} nm", "H5")
+        debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
         
         return data_matrix, wavelengths, timestamps
 
