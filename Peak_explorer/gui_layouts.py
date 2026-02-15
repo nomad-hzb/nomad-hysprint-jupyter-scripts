@@ -1749,7 +1749,7 @@ class PLAnalysisApp:
             # Create time series visualizations with explicit clear
             with self.widgets['time_series_output']:
                 self.widgets['time_series_output'].clear_output(wait=True)
-            
+
             self.create_time_series_plots()
             
             debug_print("Time series plots refreshed", "APP")
@@ -2044,7 +2044,8 @@ class PLAnalysisApp:
             
             self.plot_manager.create_time_series_plots(
                 self.fitting_engine.fitting_results,
-                output_widget=self.widgets['time_series_output']
+                output_widget=self.widgets['time_series_output'],
+                wavelength_unit=self.wavelength_unit
             )
             
             debug_print("Time series plots created", "APP")
