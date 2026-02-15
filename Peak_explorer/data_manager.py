@@ -494,7 +494,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -527,6 +527,16 @@ class H5DataLoader:
                 timestamps = f[config.H5_PATHS['giwaxs']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['giwaxs']['data']][()]
                 wavelengths = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0] / 10
+
+            elif mode == "transmission_raw":
+                timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
+                wavelengths = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
+
+            elif mode == "transmission_binned":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, wavelengths = get_axes_from_extent(extent, data_matrix)
                 
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
