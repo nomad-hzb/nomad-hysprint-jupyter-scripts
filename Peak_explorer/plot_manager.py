@@ -550,7 +550,7 @@ class PlotManager:
         if column_suffix == "center" or column_suffix == "fwhm":
             y_axis_title = f"{column_suffix} ({wavelength_unit})"
         else:
-            y_axis_title = column_suffix
+            y_axis_title = column_suffix + " (-)"
 
         fig.update_layout(
             title=f"{column_suffix} vs Time",

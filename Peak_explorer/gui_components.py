@@ -7,7 +7,6 @@ import ipywidgets as widgets
 import config
 from utils import debug_print
 from ipyvuetify.extra import FileInput
-from ipyvuetify.extra.file_input import ClientSideFile
 
 
 class GUIComponents:
@@ -52,7 +51,7 @@ class GUIComponents:
         )
         
         # Energy unit display (keep as is)
-        self.widgets['energy_unit_display'] = widgets.Label(value="λ (nm)")
+        self.widgets['energy_unit_display'] = widgets.Label(value="No data loaded")
         
         debug_print("Created energy conversion widgets", "GUI")
         
@@ -428,7 +427,6 @@ class GUIComponents:
         self.create_batch_fitting_widgets()
         self.create_export_widgets()
         self.create_output_widgets()
-        self.create_unit_conversion_widgets()
         self.create_colorbar_widgets()
         
         debug_print("Created all GUI widgets", "GUI")
@@ -620,20 +618,4 @@ class GUIComponents:
     
     def get_all_widgets(self):
         """Get all widgets dictionary"""
-        return self.widgets
-
-    def create_unit_conversion_widgets(self):
-        """Create unit conversion widgets"""
-        # Toggle button for wavelength unit
-        self.widgets['toggle_angstrom_btn'] = widgets.Button(
-            description='🔄 Toggle Å/nm',
-            button_style='warning',
-            tooltip='Toggle wavelength unit between Angstrom and nanometers',
-            layout=widgets.Layout(width='150px')
-        )
-        
-        # Unit display label
-        self.widgets['unit_display'] = widgets.Label(value="Unit: nm")
-        
-        debug_print("Created unit conversion widgets", "GUI")
         return self.widgets
