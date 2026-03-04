@@ -43,8 +43,8 @@ def get_axes_from_extent(extent, data):
     debug_print("Calculating axes from extent", "H5")
     [xmin, xmax, ymin, ymax] = extent
     nrows, ncols = data.shape
-    xaxes = np.linspace(xmin, xmax, ncols)
-    yaxes = np.linspace(ymin, ymax, nrows)
+    xaxes = np.linspace(xmin, xmax, nrows)
+    yaxes = np.linspace(ymin, ymax, ncols)
     return xaxes, yaxes
 
 
@@ -65,7 +65,7 @@ def get_h5_path_from_ipython():
         
         if ipython is not None:
             # Execute the magic command
-            ipython.magic('store -r h5_path')
+            ipython.run_line_magic('store', '-r h5_path')
             
             # Try to access the variable from user namespace
             if 'h5_path' in ipython.user_ns:
@@ -221,6 +221,8 @@ class CSVDataLoader:
     
     def _parse_pl_format(self, lines, header_row_idx):
         """Parse PL measurement format with metadata and 'Wavelength' header"""
+        self.unit = "nm"
+
         debug_print(f"Parsing PL format starting at line {header_row_idx}", "DATA")
         
         # Extract metadata from lines before the header
@@ -294,7 +296,7 @@ class CSVDataLoader:
         
         self.wavelengths = np.array(wavelengths_list)
         debug_print(f"Wavelengths shape: {self.wavelengths.shape}", "DATA")
-        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} to {self.wavelengths.max():.2f} nm", "DATA")
+        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} to {self.wavelengths.max():.2f} {self.unit}", "DATA")
         
         intensity_array = np.array(intensity_matrix)
         debug_print(f"Intensity array shape before transpose: {intensity_array.shape}", "DATA")
@@ -314,7 +316,7 @@ class CSVDataLoader:
         debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
         debug_print("="*50, "DATA")
         
-        return self.data_matrix, self.wavelengths, self.timestamps
+        return self.data_matrix, self.wavelengths, self.timestamps, self.unit
     
     def _parse_simple_format(self, lines):
         """
@@ -494,7 +496,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -516,17 +518,32 @@ class H5DataLoader:
             if mode == "pl_raw":
                 timestamps = f[config.H5_PATHS['pl_raw']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['pl_raw']['data']][()]
-                wavelengths = f[config.H5_PATHS['pl_raw']['wavelengths']][()]
+                y_values = f[config.H5_PATHS['pl_raw']['wavelengths']][()]
+                unit = "nm"
                 
             elif mode == "pl_binned":
                 extent = f[config.H5_PATHS['pl_binned']['extent']][()]
                 data_matrix = f[config.H5_PATHS['pl_binned']['data']][()].T
-                timestamps, wavelengths = get_axes_from_extent(extent, data_matrix)
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
                 
             elif mode == "giwaxs":
                 timestamps = f[config.H5_PATHS['giwaxs']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['giwaxs']['data']][()]
-                wavelengths = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0] / 10
+                y_values = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0]
+                unit = "1/Å"
+
+            elif mode == "transmission_raw":
+                timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
+                y_values = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
+                unit = "nm"
+
+            elif mode == "transmission_binned":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
                 
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
@@ -536,9 +553,11 @@ class H5DataLoader:
             debug_print("Removing NaN from last timestamp entry", "H5")
             timestamps = timestamps[:-1]
         
-        debug_print(f"Loaded H5 data: {data_matrix.shape}, {len(wavelengths)} wavelengths, {len(timestamps)} times", "H5")
+        debug_print(f"Loaded H5 data: {data_matrix.shape}, {len(y_values)} y-axes values, {len(timestamps)} times", "H5")
+        debug_print(f"y-axes range: {y_values.min():.2f} - {y_values.max():.2f} nm", "H5")
+        debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
         
-        return data_matrix, wavelengths, timestamps
+        return data_matrix, y_values, timestamps, unit
 
 
 # =============================================================================
@@ -556,6 +575,7 @@ class DataManager:
         self.data_matrix = None
         self.wavelengths = None
         self.timestamps = None
+        self.unit = None
         self.current_time_idx = 0
         self.current_spectrum = None
         
@@ -586,7 +606,7 @@ class DataManager:
         try:
             debug_print(f"Loading data from H5 (mode: {mode})", "DATA")
             
-            self.data_matrix, self.wavelengths, self.timestamps = \
+            self.data_matrix, self.wavelengths, self.timestamps, self.unit = \
                 self.h5_loader.load_h5_data(mode)
             
             self.data_source = 'h5'
@@ -738,27 +758,6 @@ class DataManager:
             }
         return {}
 
-    def set_wavelength_unit_label(self, unit):
-        """
-        Set the wavelength unit label without changing data
-        This is for display purposes only when different data types are loaded
-        
-        Parameters:
-        -----------
-        unit : str
-            'nm' or 'angstrom'
-        
-        Returns:
-        --------
-        bool: True if successful
-        """
-        if unit not in ['nm', 'angstrom']:
-            debug_print(f"Invalid unit: {unit}", "DATA")
-            return False
-        
-        debug_print(f"Setting wavelength unit label to {unit}", "DATA")
-        return True
-
     def convert_wavelength_to_energy(self):
         """
         Convert wavelength (nm) to energy (eV)
@@ -784,52 +783,6 @@ class DataManager:
         self.data_matrix = self.data_matrix[:, ::-1]
         
         debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} eV", "DATA")
-        
-        return True
-
-    def convert_wavelengths_to_angstrom(self):
-        """
-        Convert wavelength axis from nm to Angstrom
-        1 nm = 10 Angstrom
-        
-        Returns:
-        --------
-        bool: True if conversion successful
-        """
-        if not self.is_data_loaded():
-            debug_print("Cannot convert: no data loaded", "DATA")
-            return False
-        
-        debug_print(f"Converting wavelengths from nm to Angstrom", "DATA")
-        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
-        
-        # Convert nm to Angstrom (multiply by 10)
-        self.wavelengths = self.wavelengths * 10
-        
-        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} Å", "DATA")
-        
-        return True
-
-    def convert_wavelengths_to_nm(self):
-        """
-        Convert wavelength axis from Angstrom back to nm
-        1 nm = 10 Angstrom
-        
-        Returns:
-        --------
-        bool: True if conversion successful
-        """
-        if not self.is_data_loaded():
-            debug_print("Cannot convert: no data loaded", "DATA")
-            return False
-        
-        debug_print(f"Converting wavelengths from Angstrom to nm", "DATA")
-        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} Å", "DATA")
-        
-        # Convert Angstrom to nm (divide by 10)
-        self.wavelengths = self.wavelengths / 10
-        
-        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
         
         return True
         

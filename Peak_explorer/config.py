@@ -83,7 +83,9 @@ TIMESTAMP_FORMAT = '%Y%m%d_%H%M%S'
 H5_MODES = {
     'pl_raw': 'PL raw',
     'pl_binned': 'PL binned & bgs',
-    'giwaxs': 'GIWAXS'
+    'giwaxs': 'GIWAXS',
+    'transmission_raw': 'Transmission raw',
+    'transmission_binned': 'Transmission binned & bgs'
 }
 DEFAULT_H5_MODE = 'giwaxs'
 
@@ -102,6 +104,15 @@ H5_PATHS = {
         'timestamps': '/beamline_logging/Time',
         'data': '/diffractogram/i_values',
         'wavelengths': '/diffractogram/q_values'
+    },
+    'transmission_raw': {
+        'timestamps': '/raw_optical_measurements/raw_transmission_measurements/raw_transmission_Time',
+        'data': '/raw_optical_measurements/raw_transmission_measurements/raw_transmission_data',
+        'wavelengths': '/raw_optical_measurements/wavelengths_spectrometer/wavelengths_spectrometer_data'
+    },
+    'transmission_binned': {
+        'extent': '/binned_optical_measurements/time_extent_for_binning',
+        'data': '/binned_optical_measurements/binned_transmission_measurements_bg'
     }
 }
 

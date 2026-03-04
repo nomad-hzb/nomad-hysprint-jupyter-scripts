@@ -7,13 +7,12 @@ import numpy as np
 import ipywidgets as widgets
 from IPython.display import display
 from gui_components import GUIComponents
-from data_manager import DataManager
 from fitting_engine import FittingEngine
 from plot_manager import PlotManager
 from exporters import ResultExporter
 import config
 from utils import debug_print
-from data_manager import DataManager, sanitize_float, sanitize_array
+from data_manager import DataManager, sanitize_float
 
 import warnings
 warnings.filterwarnings('ignore', message='Using UFloat objects with std_dev==0')
@@ -279,12 +278,7 @@ class GUILayouts:
             self.widgets['fit_progress'],  # Add progress bar
             self.widgets['export_btn'],
             self.widgets['export_output'],
-            widgets.HTML("<hr>"),
-            widgets.HTML("<h4>📏 Unit Conversion (Test)</h4>"),
-            widgets.HBox([
-                self.widgets['toggle_angstrom_btn'],
-                self.widgets['unit_display']
-            ])
+            widgets.HTML("<hr>")
         ])
         
         debug_print("Created batch fitting section layout", "GUI")
@@ -382,8 +376,8 @@ class PLAnalysisApp:
         # Get widget references for easy access
         self.widgets = self.gui_components.get_all_widgets()
 
-        self.wavelength_unit = 'nm'  # Track current wavelength unit ('nm' or 'angstrom')
-        
+        self.wavelength_unit = None  # Track current wavelength unit ('nm' or 'angstrom')
+
         # State management
         self.peak_models = []  # List of peak model widgets
         self.last_fit_result = None
@@ -499,16 +493,8 @@ class PLAnalysisApp:
         
         self.widgets['wavelength_range_slider'].observe(on_wavelength_range_change, names='value')
         debug_print(f"Wavelength range callback connected to {self.widgets['wavelength_range_slider']}", "APP")
-        
-        # Setup unit conversion callbacks
-        self.setup_unit_conversion_callbacks()
-        
-        debug_print("Callbacks setup complete", "APP")
 
-    def setup_unit_conversion_callbacks(self):
-        """Setup callbacks for unit conversion"""
-        self.widgets['toggle_angstrom_btn'].on_click(self.on_toggle_angstrom)
-        debug_print("Connected unit conversion callbacks", "APP")
+        debug_print("Callbacks setup complete", "APP")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
         """Update only the wavelength range lines on spectrum plot"""
@@ -654,6 +640,7 @@ class PLAnalysisApp:
                     print("Loading data from H5...")
                 
                 self.data_manager.load_from_h5(mode)
+                self.wavelength_unit = self.data_manager.unit
                 self.update_ui_after_data_load()
                 self.update_visualizations(update_heatmap=True)
                 
@@ -717,6 +704,7 @@ class PLAnalysisApp:
             
             debug_print("About to call data_manager.load_from_file", "APP")
             self.data_manager.load_from_file(file_content)
+            self.wavelength_unit = self.data_manager.unit
             debug_print("Data loaded successfully", "APP")
             
             # Update UI controls with loaded data
@@ -743,13 +731,7 @@ class PLAnalysisApp:
                 print(f"📊 {data_info['time_points']} time points, {data_info['wavelengths']} wavelengths")
                 print(f"⏱️ Time range: {data_info['time_range'][0]:.3f} - {data_info['time_range'][1]:.3f} s")
                 print(f"🌈 Wavelength range: {data_info['wavelength_range'][0]:.1f} - {data_info['wavelength_range'][1]:.1f} nm")
-    
-            # Enable energy conversion button for PL data
-            if self.data_manager.data_source == 'csv' or (self.data_manager.h5_mode in ['pl_raw', 'pl_binned']):
-                self.widgets['convert_energy_btn'].disabled = False
-            else:
-                self.widgets['convert_energy_btn'].disabled = True
-                    
+
         except Exception as e:
             import traceback
             with self.widgets['status_output']:
@@ -762,10 +744,20 @@ class PLAnalysisApp:
     
     def update_ui_after_data_load(self):
         """Update UI controls after data is loaded"""
-        debug_print("Updating UI after data load", "APP")
-        
+        debug_print("Updating UI after data load", "update_ui_after_data_load")
+
+        # Enable energy conversion button for PL data
+        if self.wavelength_unit in ['nm', 'eV']:
+            self.widgets['convert_energy_btn'].disabled = False
+        else:
+            self.widgets['convert_energy_btn'].disabled = True
+
+        # change display of energy unit
+        self.widgets['energy_unit_display'].value = f"Current unit: {self.wavelength_unit}"
+
         # Get time range
         min_idx, max_idx = self.data_manager.get_time_range()
+        debug_print(f"Time range indices: min={min_idx}, max={max_idx}", "update_ui_after_data_load")
         
         # Update time controls
         self.widgets['time_slider'].max = max_idx
@@ -800,13 +792,20 @@ class PLAnalysisApp:
         self.widgets['peak_prominence'].disabled = False
         self.widgets['peak_distance'].disabled = False
 
-        # Enable wavelength range controls
+        # Get wavelength range
         wavelength_min = float(self.data_manager.wavelengths.min())
         wavelength_max = float(self.data_manager.wavelengths.max())
+        debug_print(f"Wavelength range: min={wavelength_min}, max={wavelength_max}", "update_ui_after_data_load")
+
+        # Enable wavelength range controls
         self.widgets['wavelength_range_slider'].max = 1e12
         self.widgets['wavelength_range_slider'].min = wavelength_min
         self.widgets['wavelength_range_slider'].max = wavelength_max
         self.widgets['wavelength_range_slider'].value = [wavelength_min, wavelength_max]
+        if self.wavelength_unit in ["1/Å"]:
+            self.widgets['wavelength_range_slider'].description = f"q Range ({self.wavelength_unit})"
+        else:
+            self.widgets['wavelength_range_slider'].description = f"λ Range ({self.wavelength_unit})"
         self.widgets['wavelength_range_slider'].disabled = False
 
         # Enable colorbar controls
@@ -848,7 +847,7 @@ class PLAnalysisApp:
         self.widgets['colorbar_range_slider'].disabled = False
         self.widgets['colorbar_apply_btn'].disabled = False
         
-        debug_print("UI updated after data load", "APP")
+        debug_print("UI updated after data load", "update_ui_after_data_load")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
         """Update only the wavelength range lines on spectrum plot"""
@@ -1068,92 +1067,6 @@ class PLAnalysisApp:
         # Update peak list container
         self.update_peak_list_container()
 
-    def on_toggle_angstrom(self, button):
-        """Toggle wavelength unit between nm and Angstrom with data conversion"""
-        if not self.data_manager.is_data_loaded():
-            with self.widgets['status_output']:
-                self.widgets['status_output'].clear_output()
-                print("❌ No data loaded. Please load data first.")
-            return
-        
-        try:
-            debug_print(f"Converting from {self.wavelength_unit}", "APP")
-            
-            if self.wavelength_unit == 'nm':
-                # Convert to Angstrom
-                success = self.data_manager.convert_wavelengths_to_angstrom()
-                if success:
-                    self.wavelength_unit = 'angstrom'
-                    self.widgets['unit_display'].value = "Unit: Å"
-                    
-                    # Update wavelength range slider
-                    wl_min = float(self.data_manager.wavelengths.min())
-                    wl_max = float(self.data_manager.wavelengths.max())
-                    current_range = self.widgets['wavelength_range_slider'].value
-                    
-                    # Convert current range to Angstrom
-                    new_range = (current_range[0] * 10, current_range[1] * 10)
-                    
-                    # Update in correct order to avoid min > max errors
-                    self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
-                    self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
-                    self.widgets['wavelength_range_slider'].value = new_range
-                    self.widgets['wavelength_range_slider'].min = wl_min
-                    self.widgets['wavelength_range_slider'].max = wl_max
-                    
-                    with self.widgets['status_output']:
-                        self.widgets['status_output'].clear_output()
-                        print(f"✅ Converted to Angstrom (Å)")
-                        print(f"   Range: {wl_min:.1f} - {wl_max:.1f} Å")
-                        
-            elif self.wavelength_unit == 'angstrom':
-                # Convert to nm
-                success = self.data_manager.convert_wavelengths_to_nm()
-                if success:
-                    self.wavelength_unit = 'nm'
-                    self.widgets['unit_display'].value = "Unit: nm"
-                    
-                    # Update wavelength range slider
-                    wl_min = float(self.data_manager.wavelengths.min())
-                    wl_max = float(self.data_manager.wavelengths.max())
-                    current_range = self.widgets['wavelength_range_slider'].value
-                    
-                    # Convert current range to nm
-                    new_range = (current_range[0] / 10, current_range[1] / 10)
-                    
-                    # Update in correct order to avoid min > max errors
-                    self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
-                    self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
-                    self.widgets['wavelength_range_slider'].value = new_range
-                    self.widgets['wavelength_range_slider'].min = wl_min
-                    self.widgets['wavelength_range_slider'].max = wl_max
-                    
-                    with self.widgets['status_output']:
-                        self.widgets['status_output'].clear_output()
-                        print(f"✅ Converted to nanometers (nm)")
-                        print(f"   Range: {wl_min:.1f} - {wl_max:.1f} nm")
-            else:
-                # If currently in eV, go back to nm
-                self.wavelength_unit = 'nm'
-                self.widgets['unit_display'].value = "Unit: nm"
-                with self.widgets['status_output']:
-                    self.widgets['status_output'].clear_output()
-                    print(f"✅ Changed to nanometers (nm)")
-            
-            # Update all visualizations with new data
-            self.update_visualizations(update_heatmap=True)
-            
-            debug_print(f"Conversion complete. New unit: {self.wavelength_unit}", "APP")
-            
-        except Exception as e:
-            import traceback
-            with self.widgets['status_output']:
-                self.widgets['status_output'].clear_output()
-                print(f"❌ Error converting units: {str(e)}")
-                print("\n🔍 Full traceback:")
-                print(traceback.format_exc())
-            debug_print(f"Error in unit conversion: {e}", "APP")
-
     def on_convert_energy(self, button):
         """Convert between wavelength (nm) and energy (eV)"""
         if not self.data_manager.is_data_loaded():
@@ -1179,12 +1092,13 @@ class PLAnalysisApp:
                     self.widgets['wavelength_range_slider'].value = (wl_min, wl_max)
                     self.widgets['wavelength_range_slider'].min = wl_min
                     self.widgets['wavelength_range_slider'].max = wl_max
-                    
+                    self.widgets['wavelength_range_slider'].description = f"E Range (eV)"
+
                     with self.widgets['status_output']:
                         self.widgets['status_output'].clear_output()
                         print(f"✅ Converted to energy (eV)")
                         print(f"   Range: {wl_min:.2f} - {wl_max:.2f} eV")
-            else:
+            elif self.wavelength_unit == 'eV':
                 # Convert to nm
                 success = self.data_manager.convert_energy_to_wavelength()
                 if success:
@@ -1201,12 +1115,15 @@ class PLAnalysisApp:
                     self.widgets['wavelength_range_slider'].value = (wl_min, wl_max)
                     self.widgets['wavelength_range_slider'].min = wl_min
                     self.widgets['wavelength_range_slider'].max = wl_max
-                    
+                    self.widgets['wavelength_range_slider'].description = f"λ Range (nm)"
+
                     with self.widgets['status_output']:
                         self.widgets['status_output'].clear_output()
                         print(f"✅ Converted to wavelength (nm)")
                         print(f"   Range: {wl_min:.1f} - {wl_max:.1f} nm")
-            
+            else:
+                debug_print("Unknown wavelength unit, cannot convert", "APP")
+
             # Update all visualizations
             self.update_visualizations(update_heatmap=True)
             
@@ -1739,7 +1656,7 @@ class PLAnalysisApp:
             # Create time series visualizations with explicit clear
             with self.widgets['time_series_output']:
                 self.widgets['time_series_output'].clear_output(wait=True)
-            
+
             self.create_time_series_plots()
             
             debug_print("Time series plots refreshed", "APP")
@@ -2034,7 +1951,8 @@ class PLAnalysisApp:
             
             self.plot_manager.create_time_series_plots(
                 self.fitting_engine.fitting_results,
-                output_widget=self.widgets['time_series_output']
+                output_widget=self.widgets['time_series_output'],
+                wavelength_unit=self.wavelength_unit
             )
             
             debug_print("Time series plots created", "APP")
