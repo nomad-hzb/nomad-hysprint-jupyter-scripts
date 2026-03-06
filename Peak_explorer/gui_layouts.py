@@ -1246,15 +1246,22 @@ class PLAnalysisApp:
                 if hasattr(peak_model, '_fitted_coeffs'):
                     peak_params['fitted_coeffs'] = peak_model._fitted_coeffs
                     
-            else:  # Gaussian, Voigt, Lorentzian
+            else:  # Gaussian, Voigt, Lorentzian, Skewed Gaussian, Skewed Voigt
                 peak_params['center'] = peak_model._widgets['center'].value
                 peak_params['height'] = peak_model._widgets['height'].value
                 peak_params['sigma'] = peak_model._widgets['sigma'].value
+                
+                # Add gamma for models that use it
+                if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
+                    peak_params['gamma'] = peak_model._widgets['gamma'].value
                 
                 # Add fix flags
                 peak_params['fix_center'] = peak_model._widgets['fix_center'].value
                 peak_params['fix_height'] = peak_model._widgets['fix_height'].value
                 peak_params['fix_sigma'] = peak_model._widgets['fix_sigma'].value
+                
+                if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
+                    peak_params['fix_gamma'] = peak_model._widgets['fix_gamma'].value
             
             params['peak_models'].append(peak_params)
         
@@ -1516,7 +1523,7 @@ class PLAnalysisApp:
                 model_type = model._widgets['type'].value
                 prefix = f'p{i}_'
                 
-                if model_type == 'Gaussian' or model_type == 'Voigt' or model_type == 'Lorentzian':
+                if model_type in ['Gaussian', 'Voigt', 'Lorentzian', 'Skewed Gaussian', 'Skewed Voigt']:
                     # Update center
                     center_param = f'{prefix}center'
                     if center_param in fitted_params:
@@ -1530,6 +1537,14 @@ class PLAnalysisApp:
                         model._widgets['sigma'].value = round(fitted_params[sigma_param].value, 3)
                         print(f"  Model {i + 1} sigma: {fitted_params[sigma_param].value:.3f}")
                         updated_count += 1
+                    
+                    # Update gamma for models that have it
+                    if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
+                        gamma_param = f'{prefix}gamma'
+                        if gamma_param in fitted_params:
+                            model._widgets['gamma'].value = round(fitted_params[gamma_param].value, 3)
+                            print(f"  Model {i + 1} gamma: {fitted_params[gamma_param].value:.3f}")
+                            updated_count += 1
                     
                     # Update height (converted from amplitude)
                     amplitude_param = f'{prefix}amplitude'

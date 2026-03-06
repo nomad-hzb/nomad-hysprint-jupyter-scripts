@@ -7,7 +7,7 @@ import numpy as np
 from scipy.signal import find_peaks, peak_widths, peak_prominences
 from scipy.optimize import curve_fit
 from lmfit import Model, Parameters, CompositeModel
-from lmfit.models import GaussianModel, VoigtModel, LorentzianModel, LinearModel, PolynomialModel, ExponentialModel
+from lmfit.models import GaussianModel, VoigtModel, LorentzianModel, LinearModel, PolynomialModel, ExponentialModel, SkewedGaussianModel, SkewedVoigtModel
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 from tqdm import tqdm
@@ -371,7 +371,9 @@ class FittingModels:
             'Voigt': VoigtModel,
             'Lorentzian': LorentzianModel,
             'Linear': LinearModel,
-            'Polynomial': PolynomialModel
+            'Polynomial': PolynomialModel,
+            'Skewed Gaussian': SkewedGaussianModel,
+            'Skewed Voigt': SkewedVoigtModel
         }
         
         self.available_background_models = {
@@ -436,7 +438,7 @@ class FittingModels:
             if peak_info['type'] == 'Gaussian':
                 peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
             elif peak_info['type'] == 'Polynomial':
                 # Polynomial - use fitted coefficients if available
                 degree = peak_info.get('poly_degree', 2)
@@ -457,12 +459,23 @@ class FittingModels:
             elif peak_info['type'] == 'Lorentzian':
                 peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
             elif peak_info['type'] == 'Voigt':
                 peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_gamma'].set(value=peak_info['gamma'], min=0.001, max=100)
+            elif peak_info['type'] == 'Skewed Gaussian':
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+            elif peak_info['type'] == 'Skewed Voigt':
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
+                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+                peak_params[f'p{i}_skew'].set(value=peak_info.get('skew', 0.0), min=-10, max=10)
                 
             params.update(peak_params)
             

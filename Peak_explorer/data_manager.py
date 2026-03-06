@@ -1,834 +1,817 @@
+# data_manager.py
 """
-Data Manager Module
-
-Handles all data loading, filtering, merging, and parameter management for the
-Sample Data Explorer. This module acts as the central data hub, coordinating
-between the NOMAD API and the visualization components.
-
-Key Responsibilities:
-    - Load metadata and results from NOMAD OASIS
-    - Filter data by material, layer type, and process step
-    - Merge multiple data sources for plotting
-    - Generate parameter summaries
-    - Manage "Material Type" special parameter
-
-Classes:
-    DataManager: Central data management controller
-
-Author: HySprint Team
+Consolidated data handling module
+Contains all data loading, parsing, and management functionality
 """
-
+import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional
-from IPython.display import clear_output
-from data_loader import HySprintDataLoader
+import io
+import os
+import sys
+import config
+from utils import debug_print
+
+parent_dir = os.path.dirname(os.getcwd())
+utils_dir = os.path.join(parent_dir, 'utils')
+if utils_dir not in sys.path:
+    sys.path.insert(0, utils_dir)
+import access_token
+
+# Log notebook usage
+access_token.log_notebook_usage()
 
 
-class DataManager:
-    """Manages data loading, merging, and parameter summary generation."""
-    # Common columns that appear across all data types
-    COMMON_COLUMNS = [
-        'sample_id', 'variation', 'name', 'datetime',
-        'description', 'data_file', 'lab_id', 'position_in_plan',
-        'timestamp', 'measured_at', 'raw_data', 'data_path', 'measurement_id'
-    ]
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
+def get_axes_from_extent(extent, data):
+    """
+    Calculate axes from extent information
     
-    def __init__(self, data_loader: HySprintDataLoader, param_manager, debug):
-        """
-        Initialize data manager.
+    Parameters:
+    -----------
+    extent : list
+        [xmin, xmax, ymin, ymax]
+    data : array
+        Data matrix
         
-        Args:
-            data_loader: HySprintDataLoader instance
-            param_manager: ParameterManager instance
-            debug: DebugTools instance
-        """
-        self.data_loader = data_loader
-        self.param_manager = param_manager
-        self.debug = debug
-        
-        # Data storage
-        self.current_metadata = {}
-        self.current_results = {}
-        self.merged_data = None
-        
+    Returns:
+    --------
+    tuple: (xaxes, yaxes)
+    """
+    debug_print("Calculating axes from extent", "H5")
+    [xmin, xmax, ymin, ymax] = extent
+    nrows, ncols = data.shape
+    xaxes = np.linspace(xmin, xmax, nrows)
+    yaxes = np.linspace(ymin, ymax, ncols)
+    return xaxes, yaxes
 
-        self._x_material_is_all = False
-        self._y_material_is_all = False
-        self._color_material_is_all = False
-        self._source_material_columns = {}
-        self.sample_entry_links = {}  # {lab_id: gui_url}
 
-    def get_material_column(self, df: pd.DataFrame) -> Optional[str]:
-        """Get the material column name from dataframe."""
-        if 'layer_material_name' in df.columns:
-            return 'layer_material_name'
-        elif 'layer_material' in df.columns:
-            return 'layer_material'
-        return None
-
-    def extract_subbatch(self, sample_id: str) -> tuple:
-        """
-        Extract subbatch identifier from sample_id.
-        Pattern: {prefix}_{batch}_{subbatch}_{rest}
-        Example: HZB_FiNa_1_3_C-1 → 'HZB_FiNa_1_3'
+def get_h5_path_from_ipython():
+    """
+    Retrieve h5_path from IPython stored variables (ISA Voila integration)
+    
+    Returns:
+    --------
+    tuple: (h5_path, success) where success is True if path was found
+    """
+    try:
+        debug_print("Attempting to retrieve h5_path from IPython store", "H5")
         
-        Returns:
-            (subbatch_id, is_valid) tuple
-            subbatch_id: str like 'HZB_FiNa_1_3' or None if invalid
-            is_valid: bool indicating if pattern matched
-        """
-        parts = sample_id.split('_')
-        if len(parts) >= 4:
-            # Take first 4 parts: prefix_user_batch_subbatch
-            subbatch_id = '_'.join(parts[:4])
-            return subbatch_id, True
+        # Use IPython magic to retrieve stored variable
+        from IPython import get_ipython
+        ipython = get_ipython()
+        
+        if ipython is not None:
+            # Execute the magic command
+            ipython.run_line_magic('store', '-r h5_path')
+            
+            # Try to access the variable from user namespace
+            if 'h5_path' in ipython.user_ns:
+                h5_path = ipython.user_ns['h5_path']
+                debug_print(f"Found h5_path: {h5_path}", "H5")
+                return h5_path, True
+        
+        debug_print("h5_path not found in IPython store", "H5")
+        return None, False
+        
+    except Exception as e:
+        debug_print(f"Error retrieving h5_path: {e}", "H5")
         return None, False
 
-    def get_measurement_data(self, measurement_key: str, sample_ids: List[str]) -> Optional[pd.DataFrame]:
-        """
-        Get measurement data with lazy loading.
-        
-        PERFORMANCE OPTIMIZATION (G4): Only loads data when first requested,
-        not all at once. Can save 5-20 seconds on app startup.
-        
-        Args:
-            measurement_key: Type of measurement (e.g., 'jv_measurement', 'eqe_measurement')
-            sample_ids: List of sample IDs to load
-            
-        Returns:
-            DataFrame with measurement data, or None if not available
-        """
-        # Check if already loaded
-        if measurement_key in self.current_results:
-            return self.current_results[measurement_key]
-        
-        # Lazy load on first access
-        self.debug.print_debug(f"Lazy loading {measurement_key}...")
-        
-        from api_calls import get_all_eqe
-        
-        # Measurement type mapping
-        measurement_type_map = {
-            'jv_measurement': 'HySprint_JVmeasurement',
-            'eqe_measurement': 'HySprint_EQEmeasurement',
-            'mpp_tracking': 'HySprint_MPPTracking',
-            'simple_mpp_tracking': 'HySprint_SimpleMPPTracking',
-            'pl_measurement': 'HySprint_PLmeasurement',
-            'trpl_measurement': 'HySprint_TimeResolvedPhotoluminescence',
-            'abspl_measurement': 'HySprint_AbsPLMeasurement',
-            'pl_imaging': 'HySprint_PLImaging',
-            'sem': 'HySprint_SEM',
-            'uvvis_measurement': 'HySprint_UVvismeasurement',
-            'pes': 'HySprint_PES',
-            'cyclic_voltammetry': 'HySprint_CyclicVoltammetry',
-            'eis': 'HySprint_ElectrochemicalImpedanceSpectroscopy',
-            'trspv_measurement': 'HySprint_trSPVmeasurement',
-            'nmr': 'HySprint_Simple_NMR',
-        }
-        
-        if measurement_key not in measurement_type_map:
-            return None
-        
-        try:
-            data = get_all_eqe(
-                self.data_loader.url,
-                self.data_loader.token,
-                sample_ids,
-                measurement_type_map[measurement_key]
-            )
-            
-            if data is not None and isinstance(data, dict) and data:
-                rows = []
-                for sample_id, measurements in data.items():
-                    if measurements and len(measurements) > 0:
-                        measurement_data = measurements[0][0]
-                        measurement_data['sample_id'] = sample_id
-                        rows.append(measurement_data)
-                
-                if rows:
-                    df = pd.DataFrame(rows)
-                    self.current_results[measurement_key] = df
-                    self.debug.print_debug(f"Loaded {len(df)} rows for {measurement_key}")
-                    return df
-        except Exception as e:
-            self.debug.print_debug(f"Error loading {measurement_key}: {e}")
-        
-        return None
+def sanitize_float(value, default=0.0):
+    """
+    Replace inf/nan with a default value
     
-    def load_all_data_for_summary(self, sample_ids: List[str], variation: Dict[str, str]):
+    Parameters:
+    -----------
+    value : float
+        Value to sanitize
+    default : float
+        Default value to use if inf/nan
+        
+    Returns:
+    --------
+    float: Sanitized value
+    """
+    if not np.isfinite(value):
+        return default
+    return float(value)
+
+def sanitize_array(arr, replace_with=0.0):
+    """
+    Replace all inf/nan values in array
+    
+    Parameters:
+    -----------
+    arr : array
+        Array to sanitize
+    replace_with : float
+        Value to replace inf/nan with
+        
+    Returns:
+    --------
+    array: Sanitized array
+    """
+    arr = np.where(np.isinf(arr), np.nan, arr)
+    arr = np.where(np.isnan(arr), replace_with, arr)
+    return arr
+
+
+# =============================================================================
+# CSV DATA LOADER
+# =============================================================================
+
+class CSVDataLoader:
+    """Class to handle loading and parsing of data files"""
+
+    def __init__(self):
+        self.data_matrix = None
+        self.wavelengths = None
+        self.timestamps = None
+        self.header_info = {}
+
+    def _normalize_timestamps_to_zero(self, timestamps):
+        """Normalize timestamps to start at zero"""
+        if len(timestamps) == 0:
+            return timestamps
+        
+        first_timestamp = timestamps[0]
+        debug_print(f"Normalizing timestamps - Original range: {timestamps[0]:.3f} - {timestamps[-1]:.3f}", "DATA")
+        
+        normalized_timestamps = timestamps - first_timestamp
+        debug_print(f"Normalized time range: {normalized_timestamps[0]:.3f} - {normalized_timestamps[-1]:.3f}s", "DATA")
+        
+        return normalized_timestamps
+
+    def load_data(self, file_content):
         """
-        Load all available metadata and results for parameter summary.
-        
-        PERFORMANCE NOTE (G4): This method now loads only metadata eagerly.
-        Measurement results are loaded lazily via get_measurement_data() when needed.
-        This can reduce initial load time from 20s to 2-3s.
+        Load photoluminescence data from file content
+        Supports two formats:
+        1. PL measurement format: metadata lines + "Wavelength (nm)" header + data
+        2. Simple format: wavelengths in first row, timestamps in first column
         """
-        self.debug.print_debug("load_all_data_for_summary called")
+        debug_print("=="*25, "DATA")
+        debug_print("Starting CSV data load", "DATA")
+        debug_print(f"File content type: {type(file_content)}", "DATA")
+        debug_print(f"File content length: {len(file_content)} bytes", "DATA")
         
-        # Store sample_ids for lazy loading
-        self._cached_sample_ids = sample_ids
-        
-        # TEST: Check get_all_eqe structure
-        from api_calls import get_all_eqe
-        test_data = get_all_eqe(self.data_loader.url, self.data_loader.token, sample_ids[:5], 'HySprint_JVmeasurement')
-        self.debug.print_debug(f"get_all_eqe return type: {type(test_data)}")
-        if test_data:
-            self.debug.print_debug(f"First 3 keys: {list(test_data.keys())[:3]}")
-            first_key = list(test_data.keys())[0]
-            self.debug.print_debug(f"First value type: {type(test_data[first_key])}")
-            self.debug.print_debug(f"First value: {test_data[first_key]}")
-        
-        # G4 OPTIMIZATION: Load only metadata eagerly, results loaded lazily
-        loader_methods = {
-            'inkjet_printing': self.data_loader.load_inkjet_printing_data,
-            'cleaning': self.data_loader.load_cleaning_data,
-            'substrate': self.data_loader.load_substrate_data,
-            'evaporation': self.data_loader.load_evaporation_data,
-            'slot_die_coating': self.data_loader.load_slot_die_coating_data,
-            'spin_coating': self.data_loader.load_spin_coating_data,
-        }
-        
-        self.debug.print_debug("Loading metadata types (fast)...")
-        for measurement_type, loader_func in loader_methods.items():
-            try:
-                if measurement_type not in self.current_metadata:
-                    metadata_df = loader_func(sample_ids, variation)
-                    if metadata_df is not None and not metadata_df.empty:
-                        self.current_metadata[measurement_type] = metadata_df
-            except Exception as e:
-                pass
-        
-        self.debug.print_debug(f"Metadata loaded. Results will be loaded on-demand (lazy loading).")
-        # Note: Results are now loaded via get_measurement_data() when actually needed
-        
-        self.debug.print_debug(f"Starting results loading...")
-        
-        # Load all results using get_all_eqe for each measurement type
-        if not self.current_results:
-            self.current_results = {}
+        # Convert bytes/memoryview to string with encoding detection
+        if isinstance(file_content, bytes):
+            raw_bytes = file_content
+        elif isinstance(file_content, memoryview):
+            raw_bytes = file_content.tobytes()
+        else:
+            content_str = str(file_content)
+            raw_bytes = None
+    
+        if raw_bytes is not None:
+            debug_print(f"First 200 bytes (raw): {raw_bytes[:200]}", "DATA")
             
-            from api_calls import get_all_eqe
-            
-            measurement_types = {
-                'jv_measurement': 'HySprint_JVmeasurement',
-                'eqe_measurement': 'HySprint_EQEmeasurement',
-                'mpp_tracking': 'HySprint_MPPTracking',
-                'simple_mpp_tracking': 'HySprint_SimpleMPPTracking',
-                'pl_measurement': 'HySprint_PLmeasurement',
-                'trpl_measurement': 'HySprint_TimeResolvedPhotoluminescence',
-                'abspl_measurement': 'HySprint_AbsPLMeasurement',
-                'pl_imaging': 'HySprint_PLImaging',
-                'sem': 'HySprint_SEM',
-                'uvvis_measurement': 'HySprint_UVvismeasurement',
-                'pes': 'HySprint_PES',
-                'cyclic_voltammetry': 'HySprint_CyclicVoltammetry',
-                'eis': 'HySprint_ElectrochemicalImpedanceSpectroscopy',
-                'trspv_measurement': 'HySprint_trSPVmeasurement',
-                'nmr': 'HySprint_Simple_NMR',
-            }
-            
-            # data_key tells us where the actual results live inside the top-level measurement dict
-            measurement_data_keys = {
-                'jv_measurement':         'jv_curve',
-                'eqe_measurement':        'eqe_data',
-                'mpp_tracking':           'properties',
-                'simple_mpp_tracking':    'properties',
-                'abspl_measurement':      'results',
-                'cyclic_voltammetry':     'properties',
-                'nmr':                    'data',
-                # None means use the top-level dict directly
-                'pl_measurement':         None,
-                'trpl_measurement':       None,
-                'pl_imaging':             None,
-                'sem':                    None,
-                'uvvis_measurement':      None,
-                'pes':                    None,
-                'eis':                    None,
-                'trspv_measurement':      None,
-            }
-            top_level_fields = ['datetime', 'name', 'description', 'data_file', 'lab_id']
-            
-            for measurement_key, measurement_type in measurement_types.items():
-                self.debug.print_debug(f"Attempting to load {measurement_key}")
+            # Check for BOM to detect encoding
+            if raw_bytes.startswith(b'\xff\xfe'):
+                content_str = raw_bytes.decode('utf-16-le')
+                debug_print("Detected UTF-16 LE encoding (BOM: \\xff\\xfe)", "DATA")
+            elif raw_bytes.startswith(b'\xfe\xff'):
+                content_str = raw_bytes.decode('utf-16-be')
+                debug_print("Detected UTF-16 BE encoding (BOM: \\xfe\\xff)", "DATA")
+            elif raw_bytes.startswith(b'\xef\xbb\xbf'):
+                content_str = raw_bytes.decode('utf-8-sig')
+                debug_print("Detected UTF-8 encoding with BOM", "DATA")
+            else:
                 try:
-                    data = get_all_eqe(self.data_loader.url, self.data_loader.token, sample_ids, measurement_type)
-                    if data is not None and isinstance(data, dict) and data:
-                        rows = []
-                        data_key = measurement_data_keys.get(measurement_key)  # may be None
-            
-                        for sample_id, measurements in data.items():
-                            if not measurements or len(measurements) == 0:
-                                continue
-                            measurement_data = measurements[0][0]
-            
-                            if data_key and data_key in measurement_data:
-                                extracted = measurement_data[data_key]
-                                # extracted may be a list of dicts (e.g. jv_curve) or a dict
-                                if isinstance(extracted, list) and extracted:
-                                    if isinstance(extracted[0], dict):
-                                        # Multiple sub-measurements (e.g. forward/reverse scan)
-                                        for sub in extracted:
-                                            row = sub.copy()
-                                            for field in top_level_fields:
-                                                if field in measurement_data and field not in row:
-                                                    row[field] = measurement_data[field]
-                                            row['sample_id'] = sample_id
-                                            rows.append(row)
-                                    else:
-                                        row = {data_key: extracted}
-                                        for field in top_level_fields:
-                                            if field in measurement_data:
-                                                row[field] = measurement_data[field]
-                                        row['sample_id'] = sample_id
-                                        rows.append(row)
-                                elif isinstance(extracted, dict):
-                                    row = extracted.copy()
-                                    for field in top_level_fields:
-                                        if field in measurement_data and field not in row:
-                                            row[field] = measurement_data[field]
-                                    row['sample_id'] = sample_id
-                                    rows.append(row)
-                                else:
-                                    # Scalar or unexpected — fall back to top-level
-                                    row = measurement_data.copy()
-                                    row['sample_id'] = sample_id
-                                    rows.append(row)
-                            else:
-                                # No data_key — use top-level dict directly
-                                row = measurement_data.copy()
-                                row['sample_id'] = sample_id
-                                rows.append(row)
-            
-                        if rows:
-                            df = pd.DataFrame(rows)
-                            self.current_results[measurement_key] = df
-                            self.debug.print_debug(
-                                f"Successfully loaded {measurement_key}: {len(df)} rows, "
-                                f"columns: {list(df.columns)}"
-                            )
-                    else:
-                        self.debug.print_debug(f"{measurement_key} returned None or empty")
-                except Exception as e:
-                    self.debug.print_debug(f"Error loading {measurement_key}: {e}")
+                    content_str = raw_bytes.decode('utf-8')
+                    debug_print("Decoded as UTF-8", "DATA")
+                except UnicodeDecodeError:
+                    try:
+                        content_str = raw_bytes.decode('utf-16')
+                        debug_print("Decoded as UTF-16 (no BOM detected)", "DATA")
+                    except:
+                        raise ValueError("Could not decode file - unsupported encoding")
         
-        self.debug.print_debug(f"Loaded {len(self.current_results)} result types")
-    
-    def load_data_for_source(self, data_source: str, sample_ids: List[str], 
-                            variation: Dict[str, str], process_manager) -> Optional[pd.DataFrame]:
-        """
-        Load data for a specific data source.
+        debug_print(f"String length: {len(content_str)} characters", "DATA")
+        debug_print(f"First 200 chars: {content_str[:200]}", "DATA")
         
-        Args:
-            data_source: Name of data source (e.g., "evaporation - HTL" or "Results")
-            sample_ids: List of sample IDs
-            variation: Sample variation dictionary
-            process_manager: ProcessStepManager for mapping display names
+        # Parse the file
+        lines = content_str.strip().split('\n')
+        debug_print(f"Total lines in file: {len(lines)}", "DATA")
         
-        Returns:
-            DataFrame with loaded data or None
-        """
-        if data_source == 'Results':
-            # Load all results if not already loaded
-            if not self.current_results:
-                all_results = self.data_loader.load_all_results(sample_ids, variation)
-                self.current_results = all_results
-            return None  # Results don't return a single dataframe
+        # Try to detect file format
+        has_wavelength_header = False
+        header_row_idx = None
         
-        # Map display name to measurement type
-        measurement_type = process_manager.map_display_to_measurement_type(data_source)
+        # Check first 50 lines for "Wavelength" keyword
+        for i, line in enumerate(lines[:50]):
+            line_stripped = line.strip()
+            if any(keyword in line_stripped for keyword in ['Wavelength', 'wavelength', 'WAVELENGTH']):
+                header_row_idx = i
+                has_wavelength_header = True
+                debug_print(f"Found 'Wavelength' header at line {i}", "DATA")
+                break
         
-        if not measurement_type:
-            raise ValueError(f"Unknown data source: {data_source}")
-        
-        if measurement_type in self.current_metadata:
-            metadata_df = self.current_metadata[measurement_type]
-            
-            # ISSUE 1 FIX: Apply layer type filtering
-            filtered_df = self.filter_metadata_by_layer_type(metadata_df, data_source)
-            
-            return filtered_df
+        if has_wavelength_header:
+            # Format 1: PL measurement format with metadata
+            debug_print("Using PL measurement format parser", "DATA")
+            return self._parse_pl_format(lines, header_row_idx)
         else:
-            self.debug.print_debug(f"Metadata type '{measurement_type}' not found in current_metadata")
-            return None
+            # Format 2: Simple format (wavelengths in row 0, timestamps in column 0)
+            debug_print("No 'Wavelength' header found, trying simple format parser", "DATA")
+            return self._parse_simple_format(lines)
     
-    def extract_materials(self, df: pd.DataFrame, process_step_name: Optional[str] = None) -> List[str]:
-        """
-        Extract unique materials from a dataframe, optionally filtered by layer type.
-        
-        PERFORMANCE NOTE (G3): Uses vectorized pandas operations (dropna, unique, sorted)
-        instead of Python loops for ~100x speed improvement on large datasets.
-        """
-        materials = []
-        
-        # If process_step_name is provided and contains layer type, filter first
-        if process_step_name and '-' in process_step_name:
-            # Extract layer type from process step name
-            layer_type = process_step_name.split('-', 1)[1].strip()
-            if 'layer_type' in df.columns:
-                df = df[df['layer_type'].str.strip() == layer_type].copy()
-                self.debug.print_debug(f"extract_materials filtered by layer_type='{layer_type}': {len(df)} rows")
-        
-        if 'layer_material_name' in df.columns:
-            unique_materials = df['layer_material_name'].dropna().unique()
-            materials = sorted([str(m) for m in unique_materials])
-        elif 'layer_material' in df.columns:
-            unique_materials = df['layer_material'].dropna().unique()
-            materials = sorted([str(m) for m in unique_materials])
-        
-        return materials
-    
-    def filter_metadata_by_layer_type(self, df: pd.DataFrame, process_step_name: str) -> pd.DataFrame:
-        """Filter metadata dataframe by layer type extracted from process step name."""
-        if not process_step_name or '-' not in process_step_name or df is None or df.empty:
-            return df
-        
-        # Extract layer type from process step name
-        layer_type = process_step_name.split('-', 1)[1].strip()
-        
-        # Filter by layer type if the column exists
-        if 'layer_type' in df.columns:
-            filtered_df = df[df['layer_type'].str.strip() == layer_type].copy()
-            self.debug.print_debug(f"filter_metadata_by_layer_type: '{layer_type}' - {len(df)} -> {len(filtered_df)} rows")
-            return filtered_df
-        else:
-            self.debug.print_debug(f"filter_metadata_by_layer_type: No layer_type column")
-            return df
-    
-    def rebuild_merged_data(self, x_data_source , y_data_source , color_data_source , 
-                       x_material, y_material, color_material,
-                       group_by_subbatch=False):
-        """
-        Rebuild merged_data based on current selections.
-        
-        Args:
-            group_by_subbatch: If True, merge on subbatch instead of exact sample_id
-        """
-        print(f"\n[DEBUG] === rebuild_merged_data START ===")
-        self.debug.print_debug(f"Data sources: x={x_data_source }, y={y_data_source }, color={color_data_source }")
-        self.debug.print_debug(f"Materials: x={x_material}, y={y_material}, color={color_material}")
+    def _parse_pl_format(self, lines, header_row_idx):
+        """Parse PL measurement format with metadata and 'Wavelength' header"""
+        self.unit = "nm"
 
-        # Track which material column in merged_data belongs to which source
-        self._source_material_columns = {}
+        debug_print(f"Parsing PL format starting at line {header_row_idx}", "DATA")
         
-        if not self.current_metadata and not self.current_results:
-            self.debug.print_debug(f"No data to merge!")
-            return
+        # Extract metadata from lines before the header
+        self.header_info = self._extract_metadata(lines[:header_row_idx])
+        debug_print(f"Extracted {len(self.header_info)} metadata items", "DATA")
         
-        merged_data = None
+        # Parse header row to get timestamps
+        header_line = lines[header_row_idx]
+        debug_print(f"Header line content: {header_line[:100]}...", "DATA")
+        header_parts = header_line.split(',')
+        debug_print(f"Header split into {len(header_parts)} parts", "DATA")
         
-        # Collect all data sources that need to be included
-        active_data_sources = {}
+        # Filter out empty strings and convert to float
+        timestamp_strings = header_parts[1:]
+        valid_timestamps = [x.strip() for x in timestamp_strings if x.strip()]
         
-        from utils import ProcessStepManager
-        pm = ProcessStepManager()
+        debug_print(f"Found {len(valid_timestamps)} timestamp strings (before filtering)", "DATA")
+        debug_print(f"Found {len(valid_timestamps)} valid timestamp strings", "DATA")
+        debug_print(f"First timestamp string: '{valid_timestamps[0]}'", "DATA")
+        debug_print(f"Last timestamp string: '{valid_timestamps[-1]}'", "DATA")
         
-        # Check X data source
-        if x_data_source and x_data_source != 'Results' and x_data_source != 'None':
-            measurement_type = pm.map_display_to_measurement_type(x_data_source)
-            if measurement_type and measurement_type in self.current_metadata:
-                active_data_sources[x_data_source] = {
-                    'measurement_type': measurement_type,
-                    'material_filter': x_material if x_material != 'All' else None,
-                    'df': self.current_metadata[measurement_type]
-                }
-                self.debug.print_debug(f"Added X data source: {x_data_source} -> {measurement_type}")
+        timestamps_array = np.array([float(x) for x in valid_timestamps])
+        debug_print(f"Converted to array, shape: {timestamps_array.shape}", "DATA")
+        debug_print(f"Timestamp range: {timestamps_array.min():.3f} to {timestamps_array.max():.3f}", "DATA")
         
-        # Check Y data source
-        if y_data_source and y_data_source != 'Results' and y_data_source != 'None':
-            measurement_type = pm.map_display_to_measurement_type(y_data_source)
-            if measurement_type and measurement_type in self.current_metadata:
-                if y_data_source not in active_data_sources:
-                    active_data_sources[y_data_source] = {
-                        'measurement_type': measurement_type,
-                        'material_filter': y_material if y_material != 'All' else None,
-                        'df': self.current_metadata[measurement_type]
-                    }
-                    self.debug.print_debug(f"Added Y data source: {y_data_source} -> {measurement_type}")
+        # Normalize timestamps to start at zero
+        self.timestamps = self._normalize_timestamps_to_zero(timestamps_array)
+        debug_print(f"After normalization: {self.timestamps.min():.3f} to {self.timestamps.max():.3f}", "DATA")
         
-        # Check Color data source
-        if color_data_source and color_data_source != 'Results' and color_data_source != 'None':
-            measurement_type = pm.map_display_to_measurement_type(color_data_source)
-            if measurement_type and measurement_type in self.current_metadata:
-                if color_data_source not in active_data_sources:
-                    active_data_sources[color_data_source] = {
-                        'measurement_type': measurement_type,
-                        'material_filter': color_material if color_material != 'All' else None,
-                        'df': self.current_metadata[measurement_type]
-                    }
-                    self.debug.print_debug(f"Added Color data source: {color_data_source} -> {measurement_type}")
+        # Parse data rows
+        wavelengths_list = []
+        intensity_matrix = []
+        data_lines = lines[header_row_idx + 1:]
+        debug_print(f"Processing {len(data_lines)} data lines", "DATA")
         
-        self.debug.print_debug(f"Active data sources: {list(active_data_sources.keys())}")
-        
-        # Process each active data source
-        for data_source_name, source_info in active_data_sources.items():
-            df = source_info['df'].copy()
-            
-            # Apply layer type filter
-            if '-' in data_source_name:
-                layer_type = data_source_name.split('-', 1)[1].strip()
-                if 'layer_type' in df.columns:
-                    before_count = len(df)
-                    df = df[df['layer_type'].str.strip() == layer_type]
-                    self.debug.print_debug(f"Filtered {data_source_name} by layer_type='{layer_type}': {before_count} -> {len(df)} rows")
-            
-            # Apply material filter
-            if source_info['material_filter']:
-                material_col = 'layer_material_name' if 'layer_material_name' in df.columns else 'layer_material'
-                if material_col in df.columns:
-                    before_count = len(df)
-                    df = df[df[material_col] == source_info['material_filter']]
-                    self.debug.print_debug(f"Filtered {data_source_name} by material='{source_info['material_filter']}': {before_count} -> {len(df)} rows")
-            
-            if df.empty:
-                self.debug.print_debug(f"{data_source_name} filtered to empty, skipping")
+        for line in data_lines:
+            if not line.strip():
                 continue
             
-            self.debug.print_debug(f"Including {data_source_name}: {len(df)} rows, columns: {list(df.columns)[:10]}")
-            
-            # Merge into combined data
-            if merged_data is None:
-                merged_data = df
-                # First source keeps original column names
-                for mat_col in ['layer_material_name', 'layer_material']:
-                    if mat_col in merged_data.columns:
-                        self._source_material_columns[data_source_name] = mat_col
-                        print(f"[DEBUG] Source '{data_source_name}' → material col '{mat_col}'")
-                        break
-            else:
-                suffix = f'_{source_info["measurement_type"]}'
-                
-                # SUBBATCH GROUPING LOGIC
-                if group_by_subbatch:
-                    # Extract subbatch for both dataframes
-                    merged_data['_subbatch'], merged_data['_valid'] = zip(*merged_data['sample_id'].apply(self.extract_subbatch))
-                    df['_subbatch'], df['_valid'] = zip(*df['sample_id'].apply(self.extract_subbatch))
-                    
-                    # Track invalid samples
-                    invalid_merged = merged_data[~merged_data['_valid']]['sample_id'].unique()
-                    invalid_df = df[~df['_valid']]['sample_id'].unique()
-                    if not hasattr(self, '_invalid_samples'):
-                        self._invalid_samples = set()
-                    self._invalid_samples.update(invalid_merged)
-                    self._invalid_samples.update(invalid_df)
-                    
-                    # Filter to valid only
-                    merged_data = merged_data[merged_data['_valid']].copy()
-                    df = df[df['_valid']].copy()
-                    
-                    # Merge on subbatch
-                    merged_data = pd.merge(
-                        merged_data, df,
-                        on='_subbatch', how='inner',
-                        suffixes=('', suffix)
-                    )
-                    
-                    # Clean up temp columns
-                    merged_data = merged_data.drop(columns=['_subbatch', '_valid'], errors='ignore')
-                    if f'_valid{suffix}' in merged_data.columns:
-                        merged_data = merged_data.drop(columns=[f'_valid{suffix}'])
-                else:
-                    # Original exact sample_id merge
-                    merged_data = pd.merge(
-                        merged_data, df,
-                        on='sample_id', how='outer',
-                        suffixes=('', suffix)
-                    )
-                
-                # Track material columns after merge (same for both paths)
-                for mat_col in ['layer_material_name', 'layer_material']:
-                    suffixed = f'{mat_col}{suffix}'
-                    if suffixed in merged_data.columns:
-                        self._source_material_columns[data_source_name] = suffixed
-                        print(f"[DEBUG] Source '{data_source_name}' → material col '{suffixed}'")
-                        break
-                    elif mat_col in merged_data.columns and data_source_name not in self._source_material_columns:
-                        self._source_material_columns[data_source_name] = mat_col
-                        print(f"[DEBUG] Source '{data_source_name}' → material col '{mat_col}' (unsuffixed)")
-                        break
-                
-                self.debug.print_debug(f"After merging {data_source_name}: {len(merged_data)} rows, {len(merged_data.columns)} columns")
-        
-        # Merge results if needed
-        if self.current_results:
-            self.debug.print_debug(f"Merging results data...")
-            for result_type, result_df in self.current_results.items():
-                if result_df is None or result_df.empty:
-                    continue
-                
-                self.debug.print_debug(f"Merging {result_type}: {len(result_df)} rows")
-                
-                cols_to_drop = [col for col in result_df.columns 
-                               if merged_data is not None and col in merged_data.columns and col != 'sample_id']
-                result_df_clean = result_df.drop(columns=cols_to_drop) if cols_to_drop and merged_data is not None else result_df
-                
-                if merged_data is None:
-                    merged_data = result_df_clean.copy()
-                else:
-                    merged_data = pd.merge(
-                        merged_data, result_df_clean,
-                        on='sample_id', how='outer',
-                        suffixes=('', f'_{result_type}')
-                    )
-                
-                self.debug.print_debug(f"After merging {result_type}: {len(merged_data)} rows, {len(merged_data.columns)} columns")
-
-        # Return invalid samples if any
-        invalid_samples = getattr(self, '_invalid_samples', set())
-        self._invalid_samples = set()  # Clear for next call
-        
-        self.merged_data = merged_data
-        
-        if merged_data is not None:
-            material_cols = [col for col in merged_data.columns if 'material' in col.lower()]
-            self.debug.print_debug(f"Final merged data: {len(merged_data)} rows, {len(merged_data.columns)} columns")
-            self.debug.print_debug(f"Material columns: {material_cols}")
-        else:
-            self.debug.print_debug(f"Final merged data is None!")
-        
-        self.debug.print_debug(f"=== rebuild_merged_data END ===\n")
-        return invalid_samples
-    
-    def get_parameter_options(self, data_dict: Dict[str, pd.DataFrame], param_type: str, 
-                             is_results: bool = False) -> List[str]:
-        """
-        Get available parameters from data.
-        
-        PERFORMANCE NOTE (G4): For results data, only loads the specific measurement
-        types that are present, not all possible types.
-        """
-        if not data_dict:
-            return []
-        
-        # Initialize params list FIRST
-        params = []
-        
-        # ISSUE 3 FIX: Add "Material Type" option for process steps when "All" is selected
-        if not is_results:
-            add_material_type = False
-            if param_type == 'x_parameters' and getattr(self, '_x_material_is_all', False):
-                add_material_type = True
-            elif param_type == 'y_parameters' and getattr(self, '_y_material_is_all', False):
-                add_material_type = True
-            elif param_type == 'color_parameters' and getattr(self, '_color_material_is_all', False):
-                add_material_type = True
-            
-            if add_material_type:
-                params.append("Material Type")
-        
-        if is_results:
-            self.debug.print_if_enabled('show_parameter_flow', 
-                f"\n=== RESULTS PARAMETER COLLECTION ===\n"
-                f"param_type={param_type}, is_results={is_results}\n"
-                f"data_dict keys: {list(data_dict.keys())}")
-            
-            # Collect result parameters with measurement type suffix
-            for result_type, result_df in data_dict.items():
-                if result_df is None or result_df.empty:
-                    continue
-                
-                self.debug.print_if_enabled('show_parameter_flow',
-                    f"\nProcessing {result_type}:\n"
-                    f"  Shape: {result_df.shape}\n"
-                    f"  Columns: {list(result_df.columns)}\n"
-                    f"  'datetime' present: {'datetime' in result_df.columns}")
-                
-                for col in result_df.columns:
-                    # Determine measurement type suffix
-                    if result_type == 'jv_measurement':
-                        suffix = 'JV'
-                    elif result_type == 'eqe_measurement':
-                        suffix = 'EQE'
-                    elif result_type == 'mpp_tracking':
-                        suffix = 'MPP'
-                    elif result_type == 'simple_mpp_tracking':  # ISSUE 4 FIX
-                        suffix = 'Simple MPP'
-                    elif result_type == 'pl_measurement':
-                        suffix = 'PL'
-                    elif result_type == 'trpl_measurement':
-                        suffix = 'TRPL'
-                    elif result_type == 'abspl_measurement':
-                        suffix = 'AbsPL'
-                    else:
-                        suffix = result_type.replace('_measurement', '').upper()
-                    
-                    params.append(f"{col} ({suffix})")
-            
-            self.debug.print_if_enabled('show_parameter_flow',
-                f"\nCollected {len(params)} result parameters\n"
-                f"First 10: {params[:10]}\n"
-                f"'datetime (JV)' present: {'datetime (JV)' in params}")
-        else:
-            # Collect metadata parameters
-            # Don't pre-filter by COMMON_COLUMNS - let the blacklist handle it
-            
-            for measurement_type, metadata_df in data_dict.items():
-                for col in metadata_df.columns:
-                    if not col.endswith(('_jv', '_eqe', '_mpp')):
-                        params.append(col)
-        
-        # Apply blacklist filtering
-        self.debug.print_if_enabled('show_parameter_flow',
-            f"\n=== BLACKLIST FILTERING ===\n"
-            f"Before: {len(params)} parameters\n"
-            f"Sample params: {params[:15]}\n"
-            f"'datetime (JV)' before filter: {'datetime (JV)' in params}")
-        
-        filtered = self.param_manager.filter_parameters(params, param_type)
-        
-        self.debug.print_if_enabled('show_parameter_flow',
-            f"After: {len(filtered)} parameters\n"
-            f"Sample filtered: {filtered[:15]}\n"
-            f"'datetime (JV)' after filter: {'datetime (JV)' in filtered}")
-        
-        # Sort alphabetically
-        return sorted(filtered)
-    
-    def generate_parameter_summary(self, summary_output):
-        """Generate parameter summary table in the output widget."""
-        with summary_output:
-            clear_output()
-            
-            if not self.current_metadata and not self.current_results:
-                print("No data loaded yet.")
-                return
-            
-            # Track available result types
-            result_types = set()
-            for result_type, result_df in self.current_results.items():
-                if result_df is not None and not result_df.empty:
-                    if result_type == 'jv_measurement':
-                        result_types.add('JV')
-                    elif result_type == 'eqe_measurement':
-                        result_types.add('EQE')
-                    elif result_type == 'mpp_tracking':
-                        result_types.add('MPP Tracking')
-                    elif result_type == 'simple_mpp_tracking': 
-                        result_types.add('Simple MPP')
-                    elif result_type == 'sem':
-                        result_types.add('SEM')
-                    elif result_type == 'abspl_measurement':
-                        result_types.add('AbsPL')
-                    elif result_type == 'xrd':
-                        result_types.add('XRD')
-            
-            # Display results
-            print("="*80)
-            print("AVAILABLE RESULT TYPES")
-            print("="*80)
-            if result_types:
-                result_list = sorted(result_types)
-                print(f"  {', '.join(result_list)}")
-            else:
-                print("  None")
-            
-            # Group parameters by source
-            exclude_cols = self.COMMON_COLUMNS[:8]
-            
-            # Process each metadata source
-            for measurement_type, metadata_df in self.current_metadata.items():
-                display_name = measurement_type.replace('_', ' ').title()
-                
-                # Check if this process has a material column
-                material_col = self.get_material_column(metadata_df)
-                
-                if material_col and material_col in metadata_df.columns:
-                    # Check if layer_type column exists
-                    if 'layer_type' in metadata_df.columns:
-                        # Split by both layer_type and material
-                        for (layer_type, material_name), group_df in metadata_df.groupby(['layer_type', material_col]):
-                            if pd.isna(material_name):
-                                continue
-                            
-                            # Build section name with layer type
-                            section_name = f"{display_name} - {layer_type} - {material_name}" if not pd.isna(layer_type) else f"{display_name} - {material_name}"
-                            
-                            self._display_param_table(
-                                group_df, 
-                                section_name, 
-                                exclude_cols
-                            )
-                    else:
-                        # Split by material only (no layer_type column)
-                        for material_name, material_df in metadata_df.groupby(material_col):
-                            if pd.isna(material_name):
-                                continue
-                            
-                            self._display_param_table(
-                                material_df, 
-                                f"{display_name} - {material_name}", 
-                                exclude_cols
-                            )
-                else:
-                    # No material split
-                    self._display_param_table(metadata_df, display_name, exclude_cols)
-            
-            print("\n" + "="*80)
-
-    def _display_param_table(self, df, section_name, exclude_cols):
-        """Display parameter summary table for a single section."""
-        # Collect varying parameters
-        source_params = []
-        for col in df.columns:
-            if col in exclude_cols:
+            parts = line.split(',')
+            if len(parts) < 2:
                 continue
             
             try:
-                series = df[col].dropna()
-                if len(series) == 0:
-                    continue
+                wavelength = float(parts[0])
+                wavelengths_list.append(wavelength)
                 
-                unique_count = series.nunique()
-                total_count = len(series)
+                intensity_strings = parts[1:len(self.timestamps) + 1]
+                intensities = []
                 
-                # Skip parameters with no variation
-                if unique_count <= 1:
-                    continue
-                
-                variation_ratio = unique_count / total_count
-                
-                # Get sample values
-                if series.dtype in ['int64', 'float64']:
-                    # Show actual values if <= 5 unique
-                    if unique_count <= 5:
-                        unique_vals = sorted(series.unique())
-                        value_range = ", ".join(f"{v:.3g}" for v in unique_vals)
+                for intensity_str in intensity_strings:
+                    if intensity_str.strip():
+                        intensities.append(float(intensity_str.strip()))
                     else:
-                        value_range = f"[{series.min():.3g}, {series.max():.3g}]"
-                elif series.dtype == 'bool':
-                    counts = series.value_counts()
-                    value_range = f"T:{counts.get(True, 0)}, F:{counts.get(False, 0)}"
-                else:
-                    unique_vals = series.unique()[:5]
-                    value_range = ", ".join(str(v)[:15] for v in unique_vals)
-                    if len(series.unique()) > 5:
-                        value_range += f"... (+{len(series.unique())-5})"
+                        intensities.append(0.0)
                 
-                source_params.append({
-                    'parameter': col,
-                    'unique_count': unique_count,
-                    'total_count': total_count,
-                    'variation_ratio': variation_ratio,
-                    'value_range': value_range
-                })
-            except Exception as e:
+                while len(intensities) < len(self.timestamps):
+                    intensities.append(0.0)
+                
+                intensity_matrix.append(intensities[:len(self.timestamps)])
+            except (ValueError, IndexError):
                 continue
         
-        # Display ONLY if has varying parameters
-        if source_params:
-            source_params.sort(key=lambda x: (x['unique_count'], x['variation_ratio']), reverse=True)
+        if len(wavelengths_list) == 0:
+            raise ValueError("No wavelength data found")
+        if len(intensity_matrix) == 0:
+            raise ValueError("No intensity data found")
+        
+        debug_print(f"Parsed {len(wavelengths_list)} wavelength rows", "DATA")
+        debug_print(f"Intensity matrix has {len(intensity_matrix)} rows", "DATA")
+        
+        self.wavelengths = np.array(wavelengths_list)
+        debug_print(f"Wavelengths shape: {self.wavelengths.shape}", "DATA")
+        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} to {self.wavelengths.max():.2f} {self.unit}", "DATA")
+        
+        intensity_array = np.array(intensity_matrix)
+        debug_print(f"Intensity array shape before transpose: {intensity_array.shape}", "DATA")
+        
+        # Transpose to have time as first dimension (time x wavelength)
+        self.data_matrix = intensity_array.T
+        debug_print(f"Final data_matrix shape: {self.data_matrix.shape}", "DATA")
+        
+        # Sanitize infinity and NaN values
+        num_inf = np.sum(np.isinf(self.data_matrix))
+        num_nan = np.sum(np.isnan(self.data_matrix))
+        
+        if num_inf > 0 or num_nan > 0:
+            debug_print(f"Found {num_inf} inf and {num_nan} NaN values - replacing with 0", "DATA")
+            self.data_matrix = sanitize_array(self.data_matrix, replace_with=0.0)
+        
+        debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
+        debug_print("="*50, "DATA")
+        
+        return self.data_matrix, self.wavelengths, self.timestamps, self.unit
+    
+    def _parse_simple_format(self, lines):
+        """
+        Parse simple format:
+        Row 0: wavelength values
+        Column 0: timestamp values
+        Rest: intensity data
+        """
+        debug_print("Parsing simple format", "DATA")
+        
+        if len(lines) < 2:
+            raise ValueError("File has too few lines for simple format")
+        
+        # First line contains wavelengths
+        first_line = lines[0].strip()
+        wavelength_strings = [x.strip() for x in first_line.split(',') if x.strip()]
+        
+        # First value might be empty or a label, skip if not numeric
+        try:
+            float(wavelength_strings[0])
+            wavelengths = [float(x) for x in wavelength_strings]
+        except ValueError:
+            # First value is a label, skip it
+            wavelengths = [float(x) for x in wavelength_strings[1:]]
+        
+        self.wavelengths = np.array(wavelengths)
+        debug_print(f"Found {len(self.wavelengths)} wavelengths", "DATA")
+        debug_print(f"Wavelength range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f}", "DATA")
+        
+        # Remaining lines contain: timestamp, intensity1, intensity2, ...
+        timestamps_list = []
+        intensity_matrix = []
+        
+        for line in lines[1:]:
+            if not line.strip():
+                continue
             
-            print("\n" + "="*80)
-            print(f"{section_name.upper()}")
-            print("="*80)
-            print(f"{'Parameter':<30} {'Unique':<8} {'Samples':<8} {'Var%':<8} {'Values'}")
-            print("-"*80)
+            parts = [x.strip() for x in line.split(',')]
+            if len(parts) < 2:
+                continue
             
-            for param in source_params:
-                variation_pct = f"{param['variation_ratio']*100:.1f}%"
-                param_name = param['parameter'][:28]
-                if len(param['parameter']) > 28:
-                    param_name += ".."
+            try:
+                timestamp = float(parts[0])
+                timestamps_list.append(timestamp)
                 
-                print(f"{param_name:<30} {param['unique_count']:<8} "
-                      f"{param['total_count']:<8} {variation_pct:<8} {param['value_range']}")
+                # Get intensities (should match number of wavelengths)
+                intensities = [float(x) if x else 0.0 for x in parts[1:len(self.wavelengths)+1]]
+                
+                # Pad if necessary
+                while len(intensities) < len(self.wavelengths):
+                    intensities.append(0.0)
+                
+                intensity_matrix.append(intensities[:len(self.wavelengths)])
+            except (ValueError, IndexError) as e:
+                debug_print(f"Skipping line due to error: {e}", "DATA")
+                continue
+        
+        if len(timestamps_list) == 0:
+            raise ValueError("No timestamp data found in simple format")
+        if len(intensity_matrix) == 0:
+            raise ValueError("No intensity data found in simple format")
+        
+        timestamps_array = np.array(timestamps_list)
+        debug_print(f"Found {len(timestamps_array)} timestamps", "DATA")
+        debug_print(f"Timestamp range: {timestamps_array.min():.3f} - {timestamps_array.max():.3f}", "DATA")
+        
+        # Normalize timestamps to start at zero
+        self.timestamps = self._normalize_timestamps_to_zero(timestamps_array)
+        debug_print(f"After normalization: {self.timestamps.min():.3f} to {self.timestamps.max():.3f}", "DATA")
+        
+        # Create data matrix (time x wavelength)
+        self.data_matrix = np.array(intensity_matrix)
+        debug_print(f"Data matrix shape: {self.data_matrix.shape}", "DATA")
+        
+        # Sanitize infinity and NaN values
+        num_inf = np.sum(np.isinf(self.data_matrix))
+        num_nan = np.sum(np.isnan(self.data_matrix))
+        
+        if num_inf > 0 or num_nan > 0:
+            debug_print(f"Found {num_inf} inf and {num_nan} NaN values - replacing with 0", "DATA")
+            self.data_matrix = sanitize_array(self.data_matrix, replace_with=0.0)
+        
+        debug_print(f"Intensity range: {self.data_matrix.min():.2f} to {self.data_matrix.max():.2f}", "DATA")
+        debug_print("="*50, "DATA")
+        
+        self.header_info = {"format": "simple"}
+        
+        return self.data_matrix, self.wavelengths, self.timestamps
+
+    def _extract_metadata(self, metadata_lines):
+        """Extract metadata from key,value pairs"""
+        metadata = {}
+
+        for line in metadata_lines:
+            if ',' in line:
+                parts = line.split(',', 1)  # Split only on first comma
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip()
+                    metadata[key] = value
+
+        return metadata
+
+    def get_header_info(self):
+        """Return header information as dictionary"""
+        return self.header_info
+
+    def get_data_info(self):
+        """Return summary of loaded data"""
+        if self.data_matrix is None:
+            return "No data loaded"
+
+        info = {
+            'shape': self.data_matrix.shape,
+            'time_points': len(self.timestamps),
+            'wavelengths': len(self.wavelengths),
+            'time_range': (self.timestamps.min(), self.timestamps.max()),
+            'wavelength_range': (self.wavelengths.min(), self.wavelengths.max()),
+            'intensity_range': (self.data_matrix.min(), self.data_matrix.max())
+        }
+
+        return info
+
+    def validate_data(self):
+        """Validate loaded data for common issues"""
+        issues = []
+
+        if self.data_matrix is None:
+            issues.append("No data loaded")
+            return issues
+
+        # Check for NaN values
+        if np.isnan(self.data_matrix).any():
+            issues.append(f"Found {np.isnan(self.data_matrix).sum()} NaN values in data")
+
+        # Check for negative intensities
+        if (self.data_matrix < 0).any():
+            issues.append(f"Found {(self.data_matrix < 0).sum()} negative intensity values")
+
+        # Check wavelength ordering
+        if not np.all(np.diff(self.wavelengths) > 0):
+            issues.append("Wavelengths are not in ascending order")
+
+        # Check time ordering
+        if not np.all(np.diff(self.timestamps) > 0):
+            issues.append("Timestamps are not in ascending order")
+
+        return issues
+
+
+# =============================================================================
+# H5 DATA LOADER
+# =============================================================================
+
+class H5DataLoader:
+    """Handler for loading data from H5 files"""
+    
+    def __init__(self):
+        self.h5_path = None
+        self.data_available = False
+        
+    def check_for_h5_data(self):
+        """
+        Check if H5 data is available from ISA Voila
+        
+        Returns:
+        --------
+        bool: True if H5 data is available
+        """
+        self.h5_path, self.data_available = get_h5_path_from_ipython()
+        return self.data_available
+    
+    def load_h5_data(self, mode, h5_path=None):
+        """
+        Load data from H5 file based on mode
+        
+        Parameters:
+        -----------
+        mode : str
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
+        h5_path : str, optional
+            Path to H5 file. If None, uses stored path
+            
+        Returns:
+        --------
+        tuple: (data_matrix, wavelengths, timestamps)
+        """
+        import h5py
+        
+        if h5_path is None:
+            h5_path = self.h5_path
+            
+        if h5_path is None:
+            raise ValueError("No H5 file path available")
+        
+        debug_print(f"Loading H5 data in mode: {mode}", "H5")
+        
+        with h5py.File(h5_path, "r") as f:
+            if mode == "pl_raw":
+                timestamps = f[config.H5_PATHS['pl_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['pl_raw']['data']][()]
+                y_values = f[config.H5_PATHS['pl_raw']['wavelengths']][()]
+                unit = "nm"
+                
+            elif mode == "pl_binned":
+                extent = f[config.H5_PATHS['pl_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['pl_binned']['data']][()].T
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
+                
+            elif mode == "giwaxs":
+                timestamps = f[config.H5_PATHS['giwaxs']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['giwaxs']['data']][()]
+                y_values = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0]
+                unit = "1/Å"
+
+            elif mode == "transmission_raw":
+                timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
+                y_values = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
+                unit = "nm"
+
+            elif mode == "transmission_binned":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
+                
+            else:
+                raise ValueError(f"Unknown H5 mode: {mode}")
+        
+        # Clean up NaN values in timestamps
+        if np.isnan(timestamps[-1]):
+            debug_print("Removing NaN from last timestamp entry", "H5")
+            timestamps = timestamps[:-1]
+        
+        debug_print(f"Loaded H5 data: {data_matrix.shape}, {len(y_values)} y-axes values, {len(timestamps)} times", "H5")
+        debug_print(f"y-axes range: {y_values.min():.2f} - {y_values.max():.2f} nm", "H5")
+        debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
+        
+        return data_matrix, y_values, timestamps, unit
+
+
+# =============================================================================
+# DATA MANAGER
+# =============================================================================
+
+class DataManager:
+    """Manages data loading, storage, and validation"""
+    
+    def __init__(self):
+        self.csv_loader = CSVDataLoader()
+        self.h5_loader = H5DataLoader()
+        
+        # Data storage
+        self.data_matrix = None
+        self.wavelengths = None
+        self.timestamps = None
+        self.unit = None
+        self.current_time_idx = 0
+        self.current_spectrum = None
+        
+        # Data source tracking
+        self.data_source = None  # 'csv', 'h5', or None
+        self.h5_mode = None
+        
+        # Check for H5 data availability
+        self.h5_available = self.h5_loader.check_for_h5_data()
+        
+    def is_h5_available(self):
+        """Check if H5 data source is available"""
+        return self.h5_available
+    
+    def load_from_h5(self, mode):
+        """
+        Load data from H5 file
+        
+        Parameters:
+        -----------
+        mode : str
+            H5 data mode
+            
+        Returns:
+        --------
+        bool: True if successful
+        """
+        try:
+            debug_print(f"Loading data from H5 (mode: {mode})", "DATA")
+            
+            self.data_matrix, self.wavelengths, self.timestamps, self.unit = \
+                self.h5_loader.load_h5_data(mode)
+            
+            self.data_source = 'h5'
+            self.h5_mode = mode
+            self.current_time_idx = 0
+            self.current_spectrum = self.data_matrix[0, :]
+            
+            debug_print(f"H5 data loaded successfully: {self.data_matrix.shape}", "DATA")
+            return True
+            
+        except Exception as e:
+            debug_print(f"Error loading H5 data: {e}", "DATA")
+            raise
+    
+    def load_from_file(self, file_content):
+        """
+        Load data from uploaded file
+        
+        Parameters:
+        -----------
+        file_content : bytes
+            File content from upload widget
+            
+        Returns:
+        --------
+        bool: True if successful
+        """
+        try:
+            debug_print("Loading data from uploaded file", "DATA")
+            
+            result = self.csv_loader.load_data(file_content)
+            if len(result) == 4:
+                self.data_matrix, self.wavelengths, self.timestamps, self.unit = result
+            else:
+                self.data_matrix, self.wavelengths, self.timestamps = result
+                self.unit = "nm"  # Default for simple format
+            
+            self.data_source = 'csv'
+            self.h5_mode = None
+            self.current_time_idx = 0
+            self.current_spectrum = self.data_matrix[0, :]
+            
+            debug_print(f"CSV data loaded successfully: {self.data_matrix.shape}", "DATA")
+            return True
+            
+        except Exception as e:
+            debug_print(f"Error loading CSV data: {e}", "DATA")
+            raise
+    
+    def is_data_loaded(self):
+        """Check if data is currently loaded"""
+        return self.data_matrix is not None
+    
+    def get_data_info(self):
+        """Get information about loaded data"""
+        if not self.is_data_loaded():
+            return {"status": "No data loaded"}
+        
+        # Use sanitize_float for min/max values
+        data_min = sanitize_float(self.data_matrix.min(), default=0.0)
+        data_max = sanitize_float(self.data_matrix.max(), default=1000.0)
+        
+        return {
+            "status": "Data loaded",
+            "source": self.data_source,
+            "shape": self.data_matrix.shape,
+            "time_points": len(self.timestamps),
+            "wavelengths": len(self.wavelengths),
+            "time_range": (sanitize_float(self.timestamps.min()), sanitize_float(self.timestamps.max())),
+            "wavelength_range": (sanitize_float(self.wavelengths.min()), sanitize_float(self.wavelengths.max())),
+            "intensity_range": (data_min, data_max)
+        }
+    
+    def get_spectrum_at_time(self, time_idx):
+        """
+        Get spectrum at specific time index
+        
+        Parameters:
+        -----------
+        time_idx : int
+            Time index
+            
+        Returns:
+        --------
+        array: Intensity spectrum
+        """
+        if not self.is_data_loaded():
+            raise ValueError("No data loaded")
+        
+        if time_idx < 0 or time_idx >= len(self.timestamps):
+            raise ValueError(f"Time index {time_idx} out of range")
+        
+        return self.data_matrix[time_idx, :]
+    
+    def set_current_time(self, time_idx):
+        """
+        Set current time index and update current spectrum
+        
+        Parameters:
+        -----------
+        time_idx : int
+            Time index
+        """
+        if not self.is_data_loaded():
+            raise ValueError("No data loaded")
+        
+        # Validate and clip index
+        time_idx = max(0, min(time_idx, len(self.timestamps) - 1))
+        
+        self.current_time_idx = time_idx
+        self.current_spectrum = self.data_matrix[time_idx, :]
+        
+        debug_print(f"Current time set to index {time_idx} (t={self.timestamps[time_idx]:.3f}s)", "DATA")
+    
+    def get_current_spectrum(self):
+        """Get current spectrum"""
+        return self.current_spectrum
+    
+    def get_current_time_value(self):
+        """Get current time value in seconds"""
+        if not self.is_data_loaded():
+            return None
+        return self.timestamps[self.current_time_idx]
+    
+    def get_time_range(self):
+        """Get valid time index range"""
+        if not self.is_data_loaded():
+            return (0, 0)
+        return (0, len(self.timestamps) - 1)
+    
+    def validate_data(self):
+        """
+        Validate loaded data for issues
+        
+        Returns:
+        --------
+        list: List of validation issues (empty if no issues)
+        """
+        if not self.is_data_loaded():
+            return ["No data loaded"]
+        
+        return self.csv_loader.validate_data()
+    
+    def get_header_info(self):
+        """Get header/metadata information"""
+        if self.data_source == 'csv':
+            return self.csv_loader.get_header_info()
+        elif self.data_source == 'h5':
+            return {
+                "source": "H5 file",
+                "mode": self.h5_mode,
+                "h5_path": self.h5_loader.h5_path
+            }
+        return {}
+
+    def convert_wavelength_to_energy(self):
+        """
+        Convert wavelength (nm) to energy (eV)
+        E (eV) = 1239.8 / λ (nm)
+        
+        Returns:
+        --------
+        bool: True if conversion successful
+        """
+        if not self.is_data_loaded():
+            debug_print("Cannot convert: no data loaded", "DATA")
+            return False
+        
+        debug_print(f"Converting wavelength to energy", "DATA")
+        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
+        
+        # E (eV) = 1239.8 / λ (nm)
+        # Note: energy is inversely proportional, so order reverses
+        self.wavelengths = 1239.8 / self.wavelengths
+        # Reverse the array so it's still in ascending order
+        self.wavelengths = self.wavelengths[::-1]
+        # Also need to reverse data matrix wavelength dimension
+        self.data_matrix = self.data_matrix[:, ::-1]
+        
+        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} eV", "DATA")
+        
+        return True
+        
+    def convert_energy_to_wavelength(self):
+        """
+        Convert energy (eV) to wavelength (nm)
+        λ (nm) = 1239.8 / E (eV)
+        
+        Returns:
+        --------
+        bool: True if conversion successful
+        """
+        if not self.is_data_loaded():
+            debug_print("Cannot convert: no data loaded", "DATA")
+            return False
+        
+        debug_print(f"Converting energy to wavelength", "DATA")
+        debug_print(f"Original range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} eV", "DATA")
+        
+        # λ (nm) = 1239.8 / E (eV)
+        self.wavelengths = 1239.8 / self.wavelengths
+        # Reverse back to original order
+        self.wavelengths = self.wavelengths[::-1]
+        self.data_matrix = self.data_matrix[:, ::-1]
+        
+        debug_print(f"Converted range: {self.wavelengths.min():.2f} - {self.wavelengths.max():.2f} nm", "DATA")
+        
+        return True
