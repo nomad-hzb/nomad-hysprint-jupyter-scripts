@@ -5,7 +5,7 @@ def add_guide_sheet(workbook):
 
     # 1. Introduction (multi-line text)
     intro_lines = [
-        'Perovskite Solar Cell Fabrication Sequence',
+        'Perovskite Solar Cell Fabrication Sequence (version Jan 2026)',
         'Data Entry Guide',
         '',
         '1. Introduction',
@@ -41,8 +41,14 @@ def add_guide_sheet(workbook):
                 ws.cell(row=r, column=c, value=val)
         return start_row + len(table_data) + 2  # leave a blank row after table
 
+    # Timestamp and operator will be added to all processes
+    timestamp_operator = [
+        ['Date Time', 'Date and time of process', 'DD.MM.YYYY HH:MM:SS', 'DD.MM.YYYY HH:MM:SS', '09.01.2026 10:19:00'],
+        ['Operator', 'Person who did the process', 'Text', '', 'Max Mustermann'],
+    ]
+    
     # Experiment Info Table
-    experiment_info = [
+    experiment_info = timestamp_operator + [
         ['Date', 'Date of experiment', 'DD-MM-YYYY', '', '26-02-2025'],
         ['Project_Name', 'Scientist initials/project name', 'Text', '', 'FiNa'],
         ['Batch', 'General experiment batch number', 'Number', '', '1'],
@@ -62,7 +68,7 @@ def add_guide_sheet(workbook):
     row = write_table(guide_ws, row, 'Experiment Info', experiment_info)
 
     # Step 1: Cleaning (UV-Ozone)
-    cleaning = [
+    cleaning = timestamp_operator + [
         ['Solvent', 'Cleaning solvent', 'Text', '', 'Hellmanex'],
         ['Time', 'Ultrasonic bath time', 'Number', 's', '31'],
         ['Temperature', 'Bath temperature', 'Number', '°C', '61'],
@@ -71,7 +77,7 @@ def add_guide_sheet(workbook):
     row = write_table(guide_ws, row, 'Step 1: Cleaning (UV-Ozone)', cleaning)
 
     # Step 2: Spin Coating
-    spin_coating = [
+    spin_coating = timestamp_operator + [
         [
             'Material Name',
             'Coated material',
@@ -102,11 +108,12 @@ def add_guide_sheet(workbook):
     row = write_table(guide_ws, row, 'Step 2: Spin Coating', spin_coating)
 
     # Step 3: Evaporation
-    evaporation = [
+    evaporation = timestamp_operator + [
         ['Material Name', 'Evaporated material', 'Alphanumeric', '', 'PCBM'],
         ['Layer Type', 'Type of layer', 'Text', '', 'Electron Transport Layer'],
         ['Tool/GB name', 'Tool used', 'Text', '', 'Hysprint Evap'],
         ['Organic', 'Is the layer organic?', 'Boolean', '', 'True'],
+        ['Sample Holder width', 'Width of sample holder', 'Number', 'cm', '5'],
         ['Base Pressure', 'Base pressure', 'Number', 'bar', '0.00001'],
         ['Pressure start', 'Start pressure', 'Number', 'bar', '0.00005'],
         ['Pressure end', 'End pressure', 'Number', 'bar', '0.00003'],
@@ -122,7 +129,7 @@ def add_guide_sheet(workbook):
     row = write_table(guide_ws, row, 'Step 3: Evaporation', evaporation)
 
     # Step 4: ALD (Atomic Layer Deposition)
-    ald = [
+    ald = timestamp_operator + [
         ['Material Name', 'Deposited material', 'Alphanumeric', '', 'PCBM'],
         ['Layer Type', 'Type of layer', 'Text', '', 'Electron Transport Layer'],
         ['Tool/GB name', 'Tool used', 'Text', '', 'IRIS ALD'],
@@ -143,7 +150,7 @@ def add_guide_sheet(workbook):
     row = write_table(guide_ws, row, 'Step 4: ALD (Atomic Layer Deposition)', ald)
 
     # Step 5: Sputtering
-    sputtering = [
+    sputtering = timestamp_operator + [
         ['Material Name', 'Sputtered material', 'Alphanumeric', '', 'TiO2'],
         ['Layer Type', 'Type of layer', 'Text', '', 'Electron Transport Layer'],
         ['Tool/GB name', 'Tool used', 'Text', '', 'Hysprint tool'],
@@ -159,6 +166,20 @@ def add_guide_sheet(workbook):
         ['Notes', 'Additional notes', 'Alphanumeric', '', ''],
     ]
     row = write_table(guide_ws, row, 'Step 5: Sputtering', sputtering)
+
+    # Step X: Atmospheric
+    atmospheric = timestamp_operator + [
+        ['Room temperature', 'Room temperature', 'number', '°C', '21'],
+        ['Room relative humidity', 'Room relative humidity', 'number', '%', '30'],
+        ['Start GB Oxygen level', 'Start ppm values on glovebox', 'number', 'ppm', '0.1'],
+        ['End GB Oxygen level', 'End ppm values on glovebox', 'number', 'ppm', '0.1'],
+        ['Start GB Water level', 'Start ppm values on glovebox', 'number', 'ppm', '0.1'],
+        ['End GB Water level', 'End ppm values on glovebox', 'number', 'ppm', '0.1'],
+        ['Start GB Temperature', 'Start temperature on glovebox', 'number', '°C', '20'],
+        ['End GB Temperature', 'End temperature on glovebox', 'number', '°C', '20'],
+        ['Notes', 'Additional notes', 'Alphanumeric', '', ''],
+    ]
+    row = write_table(guide_ws, row, 'Step 6: Atmospheric', atmospheric)
 
     # 3. Data Entry Best Practices
     best_practices = [
