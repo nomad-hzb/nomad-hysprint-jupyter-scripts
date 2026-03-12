@@ -21,10 +21,11 @@ class MinimalistExperimentBuilder:
         
         # Available process types
         processes = [
-            'Spin Coating', 'Evaporation', 'Sputtering', 'ALD',
-            'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 'Inkjet Printing',
-            'Slot Die Coating', 'Dip Coating', 'Laser Scribing', 'Co-Evaporation',
-            'Ink Recycling', 'Annealing', 'Generic Process'
+            'ALD', 'Annealing', 'Blade Coating', 'Cleaning O2-Plasma',
+            'Cleaning UV-Ozone', 'Co-Evaporation', 'Dip Coating',
+            'Evaporation', 'Generic Process', 'Ink Recycling',
+            'Inkjet Printing', 'Laser Scribing', 'Slot Die Coating',
+            'Spin Coating', 'Sputtering',
         ]
         self.available_processes = ['Experiment Info'] + sorted(processes)
         
@@ -322,18 +323,33 @@ class MinimalistExperimentBuilder:
         """Create inline configuration controls - returns (numeric_controls, checkbox_controls)"""
         numeric_controls = []
         checkbox_controls = []
+
+        # Add Atmospheric Values checkbox for all processes except Experiment Info
+        # This must be added BEFORE the early return for non-configurable processes
+        if process_name != 'Experiment Info':
+            atmospheric_checkbox = widgets.Checkbox(
+                value=config.get('add_atmospheric', False),
+                description='Add Atmospheric Values',
+                style={'description_width': 'initial'},
+                layout=widgets.Layout(width='190px')
+            )
+            atmospheric_checkbox.observe(
+                lambda change, idx=index: self._update_config(idx, 'add_atmospheric', change['new']), 
+                names='value'
+            )
+            checkbox_controls.append(atmospheric_checkbox)
         
         # Check if process has configuration options
         configurable_processes = [
             'Spin Coating', 'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 
-            'Inkjet Printing', 'Co-Evaporation', 'Ink Recycling', 'Slot Die Coating'
+            'Inkjet Printing', 'Co-Evaporation', 'Ink Recycling', 'Slot Die Coating', 'Blade Coating'
         ]
         
         if process_name not in configurable_processes:
             return numeric_controls, checkbox_controls
         
         # Solvents
-        if process_name in ['Spin Coating', 'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 'Inkjet Printing', 'Ink Recycling', 'Slot Die Coating']:
+        if process_name in ['Spin Coating', 'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 'Inkjet Printing', 'Ink Recycling', 'Slot Die Coating', 'Blade Coating']:
             solvents_widget = widgets.BoundedIntText(
                 value=config.get('solvents', 0),
                 min=0, max=20,
@@ -348,7 +364,7 @@ class MinimalistExperimentBuilder:
             numeric_controls.append(solvents_widget)
         
         # Solutes
-        if process_name in ['Spin Coating', 'Inkjet Printing', 'Ink Recycling', 'Slot Die Coating']:
+        if process_name in ['Spin Coating', 'Inkjet Printing', 'Ink Recycling', 'Slot Die Coating', 'Blade Coating']:
             solutes_widget = widgets.BoundedIntText(
                 value=config.get('solutes', 0),
                 min=0, max=20,
@@ -427,11 +443,31 @@ class MinimalistExperimentBuilder:
                     names='value'
                 )
                 checkbox_controls.append(checkbox)
+
+        # Checkboxes for Spin Coating
+        if process_name == 'Blade Coating' or process_name == 'Slot Die Coating' :
+            checkbox_options = [
+                ('gasquenching', 'Gas Quenching'),
+                ('vacuumquenching', 'Vacuum Quenching')
+            ]
+            
+            for option_key, option_label in checkbox_options:
+                checkbox = widgets.Checkbox(
+                    value=config.get(option_key, False),
+                    description=option_label,
+                    style={'description_width': 'initial'},
+                    layout=widgets.Layout(width='140px')
+                )
+                checkbox.observe(
+                    lambda change, idx=index, key=option_key: self._update_config(idx, key, change['new']), 
+                    names='value'
+                )
+                checkbox_controls.append(checkbox)
         
         # Checkboxes for Inkjet Printing
         if process_name == 'Inkjet Printing':
             checkbox_options = [
-                ('annealing', 'Annealing'),
+                #('annealing', 'Annealing'),
                 ('gavd', 'GAVD')
             ]
             
@@ -501,7 +537,7 @@ class MinimalistExperimentBuilder:
             self.current_sequence[index]['process'] = new_process_type
             
             # Reset config when changing process type
-            if new_process_type in ['Spin Coating', 'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 'Inkjet Printing', 'Slot Die Coating']:
+            if new_process_type in ['Spin Coating', 'Cleaning O2-Plasma', 'Cleaning UV-Ozone', 'Inkjet Printing', 'Slot Die Coating', 'Blade Coating']:
                 self.current_sequence[index]['config'] = self._get_default_config(new_process_type)
             else:
                 self.current_sequence[index].pop('config', None)
@@ -512,10 +548,11 @@ class MinimalistExperimentBuilder:
         """Get default configuration for a process"""
         defaults = {
             'Spin Coating': {'solvents': 1, 'solutes': 1, 'spinsteps': 1, 'antisolvent': False, 'gasquenching': False, 'vacuumquenching': False},
+            'Blade Coating': {'solvents': 1, 'solutes': 1, 'gasquenching': False, 'vacuumquenching': False},
             'Cleaning O2-Plasma': {'solvents': 2},
             'Cleaning UV-Ozone': {'solvents': 2},
             'Inkjet Printing': {'solvents': 1, 'solutes': 1, 'annealing': False, 'gavd': False},
-            'Slot Die Coating': {'solvents': 1, 'solutes': 1},
+            'Slot Die Coating': {'solvents': 1, 'solutes': 1, 'gasquenching': False, 'vacuumquenching': False},
             'Co-Evaporation': {'materials': 2},
             'Ink Recycling': {'solvents': 1, 'solutes': 1, 'precursors': 1},
             'Evaporation': {'carbon_paste': False}
