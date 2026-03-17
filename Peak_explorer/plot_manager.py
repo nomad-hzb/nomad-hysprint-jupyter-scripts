@@ -511,13 +511,11 @@ class PlotManager:
         
         return self.spectrum_fig
 
-    def create_single_plotly_figure(self, peak_ids, df, column_suffix, wavelength_unit='nm'):
+    @staticmethod
+    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm'):
         fig = go.Figure()
         for i, peak_id in enumerate(peak_ids):
             selected_column = f'{peak_id}_{column_suffix}'
-
-            if column_suffix == "amplitude":
-                column_suffix = "Area"
 
             if selected_column in df.columns:
                 # Prepare custom_data with both index and time
@@ -533,7 +531,7 @@ class PlotManager:
                         line=dict(width=2),
                         marker=dict(size=6),
                         customdata=custom_data,
-                        hovertemplate="<b>Time Index: %{custom_data[0]}</b><br>Time: %{custom_data[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
+                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
                     ))
                 else:
                     # Other traces just show their value
@@ -547,13 +545,18 @@ class PlotManager:
                         hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
                     ))
 
-        if column_suffix == "center" or column_suffix == "fwhm":
-            y_axis_title = f"{column_suffix} ({wavelength_unit})"
+        if column_suffix == "amplitude":
+            title_suffix = "Area"
         else:
-            y_axis_title = column_suffix + " (-)"
+            title_suffix = column_suffix
+
+        if title_suffix == "center" or title_suffix == "fwhm":
+            y_axis_title = f"{title_suffix} ({wavelength_unit})"
+        else:
+            y_axis_title = title_suffix + " (-)"
 
         fig.update_layout(
-            title=f"{column_suffix} vs Time",
+            title=f"{title_suffix} vs Time",
             xaxis_title="Time (s)",
             yaxis_title=y_axis_title,
             height=400,
