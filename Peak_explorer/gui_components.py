@@ -400,7 +400,14 @@ class GUIComponents:
             tooltip='Export fitting results to Excel',
             layout=widgets.Layout(width='160px')
         )
-        
+
+        self.widgets['save_h5_btn'] = widgets.Button(
+            description='💾 Save into h5',
+            button_style='success',
+            tooltip='Save fitting results into the h5 file',
+            layout=widgets.Layout(width='160px', display='none')
+        )
+
         self.widgets['export_output'] = widgets.Output()
         
         debug_print("Created export widgets", "GUI")

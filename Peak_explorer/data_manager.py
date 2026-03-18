@@ -557,7 +557,7 @@ class H5DataLoader:
         debug_print(f"y-axes range: {y_values.min():.2f} - {y_values.max():.2f} nm", "H5")
         debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
         
-        return data_matrix, y_values, timestamps, unit
+        return data_matrix, y_values, timestamps, unit, self.h5_path
 
 
 # =============================================================================
@@ -582,6 +582,7 @@ class DataManager:
         # Data source tracking
         self.data_source = None  # 'csv', 'h5', or None
         self.h5_mode = None
+        self.h5_path = None
         
         # Check for H5 data availability
         self.h5_available = self.h5_loader.check_for_h5_data()
@@ -606,7 +607,7 @@ class DataManager:
         try:
             debug_print(f"Loading data from H5 (mode: {mode})", "DATA")
             
-            self.data_matrix, self.wavelengths, self.timestamps, self.unit = \
+            self.data_matrix, self.wavelengths, self.timestamps, self.unit, self.h5_path = \
                 self.h5_loader.load_h5_data(mode)
             
             self.data_source = 'h5'

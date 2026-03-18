@@ -4,12 +4,21 @@ Utility functions for Photoluminescence Analysis App
 """
 import config
 from datetime import datetime
+import ipywidgets as widgets
+
+debug_output = widgets.Output(
+    layout=widgets.Layout(
+        max_height='300px',
+        overflow_y='auto',
+        width='100%'
+    )
+)
 
 
 def debug_print(message, category="DEBUG"):
     """
     Print debug messages if DEBUG_MODE is enabled
-    
+
     Parameters:
     -----------
     message : str
@@ -19,7 +28,8 @@ def debug_print(message, category="DEBUG"):
     """
     if config.DEBUG_MODE:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] [{category}] {message}")
+        with debug_output:
+            print(f"[{timestamp}] [{category}] {message}")
 
 
 def format_timestamp(timestamp_format=None):

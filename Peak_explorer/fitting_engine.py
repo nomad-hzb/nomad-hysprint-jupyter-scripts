@@ -682,6 +682,7 @@ class FittingModels:
                 'aic': getattr(result, 'aic', None),
                 'bic': getattr(result, 'bic', None),
                 'parameters': {},
+                'peak_models': fit_params.get('peak_models', []),
                 'fitted_curve': result.best_fit,
                 'residuals': result.residual,
                 'smart_init_used': use_smart_init

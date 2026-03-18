@@ -11,7 +11,7 @@ from fitting_engine import FittingEngine
 from plot_manager import PlotManager
 from exporters import ResultExporter
 import config
-from utils import debug_print
+from utils import debug_print, debug_output
 from data_manager import DataManager, sanitize_float
 
 import warnings
@@ -276,7 +276,10 @@ class GUILayouts:
                 self.widgets['fit_all_range_btn']
             ]),
             self.widgets['fit_progress'],  # Add progress bar
-            self.widgets['export_btn'],
+            widgets.HBox([
+                self.widgets['export_btn'],
+                self.widgets['save_h5_btn'],
+            ]),
             self.widgets['export_output'],
             widgets.HTML("<hr>")
         ])
@@ -420,8 +423,9 @@ class PLAnalysisApp:
         self.widgets['fit_all_btn'].on_click(self.on_fit_all)
         self.widgets['fit_all_range_btn'].on_click(self.on_fit_range)
         
-        # Export callback
+        # Export callbacks
         self.widgets['export_btn'].on_click(self.on_export_results)
+        self.widgets['save_h5_btn'].on_click(self.on_save_into_h5)
 
         # Colorbar control callbacks
         self.widgets['colorbar_apply_btn'].on_click(self.on_colorbar_apply)
@@ -847,6 +851,12 @@ class PLAnalysisApp:
         self.widgets['colorbar_range_slider'].disabled = False
         self.widgets['colorbar_apply_btn'].disabled = False
         
+        # Show/hide Save into h5 button based on data source
+        if self.data_manager.data_source == 'h5':
+            self.widgets['save_h5_btn'].layout.display = ''
+        else:
+            self.widgets['save_h5_btn'].layout.display = 'none'
+
         debug_print("UI updated after data load", "update_ui_after_data_load")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
@@ -1467,8 +1477,8 @@ class PLAnalysisApp:
                     wavelength_range=wl_range_display,
                     wavelength_unit=self.wavelength_unit
                 )
-                
-                fig.show(renderer=config.PLOT_RENDERER)
+
+                display(fig)
             
             # Automatically update parameters from successful fit
             if result.rsquared > 0.5:  # Only auto-update if fit is decent
@@ -1873,7 +1883,18 @@ class PLAnalysisApp:
     # =========================================================================
     # VISUALIZATION
     # =========================================================================
-    
+
+    def on_save_into_h5(self, button):
+        debug_print("Start of saving results into h5", "APP")
+        if not self.fitting_engine.has_fitting_results():
+            with self.widgets['export_output']:
+                self.widgets['export_output'].clear_output()
+                print("❌ No fitting results to export. Please fit spectra first.")
+            return
+
+        debug_print("Saving results", "APP")
+        self.export_utils.export_to_isa_h5(self.fitting_engine.fitting_results, self.data_manager.h5_path)
+
     def update_visualizations(self, update_heatmap: bool = False):
         """Update both heatmap and spectrum visualizations
         Parameters
@@ -2354,6 +2375,7 @@ class PLAnalysisApp:
         # Store accordion reference after layout is created
         self._store_accordion_reference()
         
+        display(debug_output)
         display(header)
         display(main_content)
         
