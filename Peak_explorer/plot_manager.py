@@ -720,21 +720,21 @@ class PlotManager:
         df = df.sort_values('time').reset_index(drop=True)
         df['index'] = df['index'].astype(int)
         return df
-    
-    def export_plots(self, fitting_results, output_dir):
-        """
-        Export time series plots to HTML files
-        
-        Parameters:
-        -----------
-        fitting_results : dict
-            Fitting results
-        output_dir : str
-            Output directory
-        """
-        debug_print(f"Exporting plots to {output_dir}", "PLOT")
-        
-        self.export_utils.export_plots(fitting_results, output_dir)
+
+    # def export_plots(self, fitting_results, output_dir):
+    #     """
+    #     Export time series plots to HTML files
+    #
+    #     Parameters:
+    #     -----------
+    #     fitting_results : dict
+    #         Fitting results
+    #     output_dir : str
+    #         Output directory
+    #     """
+    #     debug_print(f"Exporting plots to {output_dir}", "PLOT")
+    #
+    #     self.export_utils.export_plots(fitting_results, output_dir)
     
     def get_current_heatmap(self):
         """Get current heatmap figure"""
