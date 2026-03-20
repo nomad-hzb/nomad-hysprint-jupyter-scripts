@@ -53,9 +53,16 @@ class ResultExporter:
             
         return filename
 
-    def export_to_isa_h5(self, fitting_results, h5_path):
+    def export_to_isa_h5(self, fitting_results, h5_path, time_unit='s', h5_mode=None):
         """
-        Export fitting results to Excel file with multiple sheets
+        Export fitting results into the existing HDF5 file.
+
+        A timestamped subgroup is created under /fitting_results/ with the name
+        fit_YYYYMMDD_HH_MM_SS. The group carries attributes for the time and
+        index range covered as well as the creation timestamp. All columns from
+        the merged dataframe (peak_params, stderr, quality) are written as
+        individual datasets under that group. Each dataset has peak_name and
+        model_type attributes.
 
         Parameters:
         -----------
@@ -63,16 +70,69 @@ class ResultExporter:
             Dictionary of fitting results from batch fitting
         h5_path : str
         """
-        # todo implement saving into h5
-        debug_print("Exporting to ISA HDF5 format is not yet implemented.", "Exporter")
+        import h5py
 
-        debug_print("h5_path: " + h5_path, "Exporter")
+        debug_print("Exporting fitting results to HDF5: " + h5_path, "Exporter")
 
-        # get peak parameters and standard error
         peak_params_df, stderr_df = self._create_peak_parameters_dataframe(fitting_results)
-
-        # get quality df
         quality_df = self._create_quality_metrics_dataframe(fitting_results)
+
+        # Merge the three dataframes into one; columns shared between them are kept once
+        combined_df = peak_params_df.copy()
+        for df in (stderr_df, quality_df):
+            new_cols = [c for c in df.columns if c not in combined_df.columns]
+            combined_df = combined_df.join(df[new_cols], how='outer') if new_cols else combined_df
+
+        # Build peak_id -> {name, model_type} mapping from the first successful result
+        peak_info_map = {}
+        for result in fitting_results.values():
+            if result and result.get('success'):
+                for i, pm in enumerate(result.get('peak_models', [])):
+                    pid = f'p{i}'
+                    peak_info_map[pid] = {
+                        'name': pm.get('name', pid),
+                        'model_type': pm.get('type', 'Unknown')
+                    }
+                break
+
+        debug_print("Peak info map: " + str(peak_info_map), "Exporter")
+
+        # Time and index range from the merged df
+        min_time  = float(combined_df['Time'].min())       if 'Time'       in combined_df.columns else float('nan')
+        max_time  = float(combined_df['Time'].max())       if 'Time'       in combined_df.columns else float('nan')
+        min_index = int(combined_df['Time_Index'].min())   if 'Time_Index' in combined_df.columns else -1
+        max_index = int(combined_df['Time_Index'].max())   if 'Time_Index' in combined_df.columns else -1
+
+        now = datetime.now()
+        group_name = now.strftime('fit_%Y%m%d_%H_%M_%S')
+
+        with h5py.File(h5_path, 'a') as h5f:
+            grp = h5f.require_group(f'fitting_results/{group_name}')
+
+            # Group-level attributes
+            grp.attrs['min_time']    = min_time
+            grp.attrs['max_time']    = max_time
+            grp.attrs['min_index']   = min_index
+            grp.attrs['max_index']   = max_index
+            grp.attrs['time_unit']   = time_unit
+            grp.attrs['h5_mode']     = h5_mode if h5_mode is not None else 'N/A'
+            grp.attrs['created_at']  = now.isoformat()
+
+            # One dataset per column
+            for col in combined_df.columns:
+                data = combined_df[col].values
+                if col in grp:
+                    del grp[col]
+                ds = grp.create_dataset(col, data=data)
+
+                # Resolve peak_id from column name (e.g. "p0_center" -> "p0")
+                parts = col.split('_')
+                peak_id = parts[0] if len(parts) > 1 and parts[0].startswith('p') and parts[0][1:].isdigit() else None
+                info = peak_info_map.get(peak_id, {})
+                ds.attrs['peak_name']   = info.get('name', 'N/A')
+                ds.attrs['model_type']  = info.get('model_type', 'N/A')
+
+        debug_print(f"Saved fitting results to {h5_path} under /fitting_results/{group_name}", "Exporter")
 
 
         
@@ -126,8 +186,8 @@ class ResultExporter:
                     peak_type = peak_models[peak_index]['type'] if peak_index < len(peak_models) else 'Unknown'
                     row[f'{peak_id}_model_type'] = peak_type
 
-                    debug_print(f"Processing {peak_id} with model {peak_type}", "Exporter")
-                    debug_print("params: " + str(params), "Exporter")
+                    # debug_print(f"Processing {peak_id} with model {peak_type}", "Exporter")
+                    # debug_print("params: " + str(params), "Exporter")
                     
                     # Add main parameters with peak_id prefix
                     for param_type, value in params.items():
