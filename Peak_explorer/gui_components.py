@@ -585,10 +585,19 @@ class GUIComponents:
         poly_degree_input._peak_idx = peak_idx
         remove_btn._peak_idx = peak_idx
         
-        # Row 1: Model label, type selector, remove button
+        # Peak name input (editable, defaults to p{peak_idx})
+        name_input = widgets.Text(
+            value=peak_info.get('name', f'p{peak_idx}'),
+            description='',
+            placeholder='Peak name',
+            layout=widgets.Layout(width='80px')
+        )
+
+        # Row 1: Model label, type selector, name input, remove button
         row1 = widgets.HBox([
             widgets.HTML(value=f"<b>Model {peak_idx + 1}:</b>", layout=widgets.Layout(width='70px')),
             peak_type,
+            name_input,
             remove_btn
         ])
         
@@ -602,6 +611,7 @@ class GUIComponents:
         peak_row._peak_idx = peak_idx
         peak_row._widgets = {
             'type': peak_type,
+            'name': name_input,
             'center': center_input,
             'height': height_input,
             'sigma': sigma_input,
