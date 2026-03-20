@@ -21,7 +21,7 @@ class Plotter:
         self.colorscale = config.DEFAULT_COLORSCALE
         self.peak_colors = ['green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 
-    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm'):
+    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm', time_unit='s'):
         """
         Create heatmap visualization of PL data
 
@@ -56,7 +56,7 @@ class Plotter:
             y=wavelengths,
             colorscale=self.colorscale,
             colorbar=colorbar_cfg,
-            hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}}s<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
+            hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}} {time_unit}<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
             name="PL Data"
         ))
 
@@ -66,7 +66,7 @@ class Plotter:
             fig.add_vline(
                 x=current_time,
                 line=dict(color="red", width=3),
-                annotation_text=f"t = {current_time:.3f}s",
+                annotation_text=f"t = {current_time:.3f} {time_unit}",
                 annotation_position="top",
                 annotation=dict(
                     font=dict(color="red", size=12, family="Arial Black"),
@@ -82,7 +82,7 @@ class Plotter:
                 text="Peak Analysis Heatmap",
                 font=dict(size=16, family="Arial", color="darkblue")
             ),
-            xaxis_title="Time (s)",
+            xaxis_title=f"Time ({time_unit})",
             yaxis_title=f"Wavelength ({wavelength_unit})" if wavelength_unit == 'nm' else f"Energy ({wavelength_unit})" if wavelength_unit == 'eV' else f"q ({wavelength_unit})",
             height=500,
             width=800,
@@ -386,7 +386,7 @@ class PlotManager:
         self.heatmap_fig = None
         self.spectrum_fig = None
         
-    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm'):
+    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm', time_unit='s'):
         """
         Create heatmap visualization as FigureWidget for efficient updates
         
@@ -415,7 +415,8 @@ class PlotManager:
             wavelengths,
             timestamps,
             current_time_idx=current_time_idx,
-            wavelength_unit=wavelength_unit
+            wavelength_unit=wavelength_unit,
+            time_unit=time_unit
         )
         
         # Convert to FigureWidget for efficient updates
@@ -512,7 +513,7 @@ class PlotManager:
         return self.spectrum_fig
 
     @staticmethod
-    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm'):
+    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm', time_unit='s'):
         fig = go.Figure()
         for i, peak_id in enumerate(peak_ids):
             selected_column = f'{peak_id}_{column_suffix}'
@@ -531,7 +532,7 @@ class PlotManager:
                         line=dict(width=2),
                         marker=dict(size=6),
                         customdata=custom_data,
-                        hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
+                        hovertemplate=f"<b>Time Index: %{{customdata[0]}}</b><br>Time: %{{customdata[1]:.2f}} {time_unit}<br><br>%{{fullData.name}}: %{{y:.3f}}<extra></extra>"
                     ))
                 else:
                     # Other traces just show their value
@@ -557,7 +558,7 @@ class PlotManager:
 
         fig.update_layout(
             title=f"{title_suffix} vs Time",
-            xaxis_title="Time (s)",
+            xaxis_title=f"Time ({time_unit})",
             yaxis_title=y_axis_title,
             height=400,
             template='plotly_white',
@@ -574,7 +575,7 @@ class PlotManager:
         )
         return fig
     
-    def create_time_series_plots(self, fitting_results, output_widget=None, wavelength_unit='nm'):
+    def create_time_series_plots(self, fitting_results, output_widget=None, wavelength_unit='nm', time_unit='s'):
         """
         Create time series plots from fitting results
         
@@ -611,22 +612,22 @@ class PlotManager:
         
         # Plot 1: Peak centers vs time
         fig_centers = self.create_single_plotly_figure(peak_ids, df, column_suffix='center',
-                                                       wavelength_unit=wavelength_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit)
         figures.append(fig_centers)
 
         # Plot 2: Peak areas vs time
         fig_areas = self.create_single_plotly_figure(peak_ids, df, column_suffix='amplitude',
-                                                     wavelength_unit=wavelength_unit)
+                                                     wavelength_unit=wavelength_unit, time_unit=time_unit)
         figures.append(fig_areas)
 
         # Plot 3: FWHM vs time
         fig_fwhm = self.create_single_plotly_figure(peak_ids, df, column_suffix='fwhm',
-                                                    wavelength_unit=wavelength_unit)
+                                                    wavelength_unit=wavelength_unit, time_unit=time_unit)
         figures.append(fig_fwhm)
-        
+
         # Plot 4: Peak heights vs time
         fig_heights = self.create_single_plotly_figure(peak_ids, df, column_suffix='height',
-                                                       wavelength_unit=wavelength_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit)
         figures.append(fig_heights)
         
         # Plot 5: R-squared vs time
@@ -644,12 +645,12 @@ class PlotManager:
                 line=dict(width=2, color='blue'),
                 marker=dict(size=6),
                 customdata=customdata,
-                hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>R²: %{y:.4f}<extra></extra>"
+                hovertemplate=f"<b>Time Index: %{{customdata[0]}}</b><br>Time: %{{customdata[1]:.2f}} {time_unit}<br><br>R²: %{{y:.4f}}<extra></extra>"
             ))
             
             fig_quality.update_layout(
                 title="Fitting Quality (R²) vs Time",
-                xaxis_title="Time (s)",
+                xaxis_title=f"Time ({time_unit})",
                 yaxis_title="R²",
                 height=400,
                 template='plotly_white',
