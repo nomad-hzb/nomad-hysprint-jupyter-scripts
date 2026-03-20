@@ -1241,7 +1241,8 @@ class PLAnalysisApp:
             model_type = peak_model._widgets['type'].value
             
             peak_params = {
-                'type': model_type
+                'type': model_type,
+                'name': peak_model._widgets['name'].value
             }
             
             # Add parameters based on model type
@@ -1887,13 +1888,32 @@ class PLAnalysisApp:
     def on_save_into_h5(self, button):
         debug_print("Start of saving results into h5", "APP")
         if not self.fitting_engine.has_fitting_results():
-            with self.widgets['export_output']:
-                self.widgets['export_output'].clear_output()
+            with self.widgets['status_output']:
+                self.widgets['status_output'].clear_output()
                 print("❌ No fitting results to export. Please fit spectra first.")
             return
 
         debug_print("Saving results", "APP")
-        self.export_utils.export_to_isa_h5(self.fitting_engine.fitting_results, self.data_manager.h5_path)
+        try:
+            self.export_utils.export_to_isa_h5(
+                self.fitting_engine.fitting_results,
+                self.data_manager.h5_path,
+                time_unit=self.data_manager.time_unit,
+                h5_mode=self.data_manager.h5_mode
+            )
+            with self.widgets['status_output']:
+                self.widgets['status_output'].clear_output()
+                print(f"✅ Fitting results saved to H5 file.")
+        except OSError as e:
+            if 'lock' in str(e).lower() or 'unable to open' in str(e).lower():
+                with self.widgets['status_output']:
+                    self.widgets['status_output'].clear_output()
+                    print("⚠️ Could not save: the H5 file is currently open in another program. Please close it and try again.")
+            else:
+                with self.widgets['status_output']:
+                    self.widgets['status_output'].clear_output()
+                    print(f"❌ Error saving to H5: {e}")
+            debug_print(f"OSError saving to H5: {e}", "APP")
 
     def update_visualizations(self, update_heatmap: bool = False):
         """Update both heatmap and spectrum visualizations
@@ -1932,7 +1952,8 @@ class PLAnalysisApp:
                     self.data_manager.wavelengths,
                     self.data_manager.timestamps,
                     current_time_idx=self.data_manager.current_time_idx,
-                    wavelength_unit=self.wavelength_unit
+                    wavelength_unit=self.wavelength_unit,
+                    time_unit=self.data_manager.time_unit
                 )
                 
                 display(fig)
@@ -1988,7 +2009,8 @@ class PLAnalysisApp:
             self.plot_manager.create_time_series_plots(
                 self.fitting_engine.fitting_results,
                 output_widget=self.widgets['time_series_output'],
-                wavelength_unit=self.wavelength_unit
+                wavelength_unit=self.wavelength_unit,
+                time_unit=self.data_manager.time_unit
             )
             
             debug_print("Time series plots created", "APP")
