@@ -520,31 +520,41 @@ class H5DataLoader:
                 data_matrix = f[config.H5_PATHS['pl_raw']['data']][()]
                 y_values = f[config.H5_PATHS['pl_raw']['wavelengths']][()]
                 unit = "nm"
-                
+                time_unit = "s"
+
             elif mode == "pl_binned":
                 extent = f[config.H5_PATHS['pl_binned']['extent']][()]
                 data_matrix = f[config.H5_PATHS['pl_binned']['data']][()].T
                 timestamps, y_values = get_axes_from_extent(extent, data_matrix)
                 unit = "nm"
-                
+                time_unit = "s"
+
             elif mode == "giwaxs":
-                timestamps = f[config.H5_PATHS['giwaxs']['timestamps']][()]
+                ts_dataset = f[config.H5_PATHS['giwaxs']['timestamps']]
+                timestamps = ts_dataset[()]
                 data_matrix = f[config.H5_PATHS['giwaxs']['data']][()]
                 y_values = f[config.H5_PATHS['giwaxs']['wavelengths']][()][0]
                 unit = "1/Å"
+                # Read time unit from dataset attribute; fall back to 's'
+                time_unit = ts_dataset.attrs.get('units', ts_dataset.attrs.get('unit', 's'))
+                if isinstance(time_unit, bytes):
+                    time_unit = time_unit.decode()
+                debug_print(f"GIWAXS time unit read from attribute: {time_unit}", "H5")
 
             elif mode == "transmission_raw":
                 timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
                 y_values = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
                 unit = "nm"
+                time_unit = "s"
 
             elif mode == "transmission_binned":
                 extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
                 data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
                 timestamps, y_values = get_axes_from_extent(extent, data_matrix)
                 unit = "nm"
-                
+                time_unit = "s"
+
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
         
@@ -557,7 +567,7 @@ class H5DataLoader:
         debug_print(f"y-axes range: {y_values.min():.2f} - {y_values.max():.2f} nm", "H5")
         debug_print(f"Timestamp range: {timestamps.min():.2f} - {timestamps.max():.2f} s", "H5")
         
-        return data_matrix, y_values, timestamps, unit, self.h5_path
+        return data_matrix, y_values, timestamps, unit, time_unit, self.h5_path
 
 
 # =============================================================================
@@ -576,6 +586,7 @@ class DataManager:
         self.wavelengths = None
         self.timestamps = None
         self.unit = None
+        self.time_unit = 's'  # Unit of the timestamps axis
         self.current_time_idx = 0
         self.current_spectrum = None
         
@@ -607,7 +618,7 @@ class DataManager:
         try:
             debug_print(f"Loading data from H5 (mode: {mode})", "DATA")
             
-            self.data_matrix, self.wavelengths, self.timestamps, self.unit, self.h5_path = \
+            self.data_matrix, self.wavelengths, self.timestamps, self.unit, self.time_unit, self.h5_path = \
                 self.h5_loader.load_h5_data(mode)
             
             self.data_source = 'h5'
