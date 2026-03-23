@@ -2397,8 +2397,9 @@ class PLAnalysisApp:
         
         # Store accordion reference after layout is created
         self._store_accordion_reference()
-        
-        display(debug_output)
+
+        if config.DEBUG_MODE:
+            display(debug_output)
         display(header)
         display(main_content)
         
