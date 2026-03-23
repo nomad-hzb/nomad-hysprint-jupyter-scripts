@@ -53,7 +53,7 @@ class ResultExporter:
             
         return filename
 
-    def export_to_isa_h5(self, fitting_results, h5_path, time_unit='s', h5_mode=None):
+    def export_to_isa_h5(self, fitting_results, h5_path, time_unit='s', h5_mode=None, wavelength_unit='nm'):
         """
         Export fitting results into the existing HDF5 file.
 
@@ -117,6 +117,12 @@ class ResultExporter:
             grp.attrs['h5_mode']     = h5_mode if h5_mode is not None else 'N/A'
             grp.attrs['created_at']  = now.isoformat()
 
+            # Parameters whose unit equals the x-axis (wavelength / q) unit
+            position_params = {'center', 'sigma', 'gamma', 'fwhm',
+                               'width', 'width_10pct', 'width_50pct'}
+            # Parameters that carry intensity (arbitrary units → '-')
+            intensity_params = {'amplitude', 'height', 'area'}
+
             # One dataset per column
             for col in combined_df.columns:
                 data = combined_df[col].values
@@ -137,6 +143,14 @@ class ResultExporter:
                     info = peak_info_map.get(peak_id, {})
                     ds.attrs['peak_name']   = info.get('name', 'N/A')
                     ds.attrs['model_type']  = info.get('model_type', 'N/A')
+
+                    # Determine unit from base parameter name (strip _stderr suffix)
+                    base_param = col[len(peak_id) + 1:]          # e.g. "center" or "center_stderr"
+                    base_param = base_param.removesuffix('_stderr')
+                    if base_param in position_params:
+                        ds.attrs['unit'] = wavelength_unit
+                    elif base_param in intensity_params:
+                        ds.attrs['unit'] = '-'
 
         debug_print(f"Saved fitting results to {h5_path} under /fitting_results/{group_name}", "Exporter")
 
