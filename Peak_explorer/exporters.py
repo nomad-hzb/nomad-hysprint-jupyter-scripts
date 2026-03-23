@@ -114,7 +114,6 @@ class ResultExporter:
             grp.attrs['max_time']    = max_time
             grp.attrs['min_index']   = min_index
             grp.attrs['max_index']   = max_index
-            grp.attrs['time_unit']   = time_unit
             grp.attrs['h5_mode']     = h5_mode if h5_mode is not None else 'N/A'
             grp.attrs['created_at']  = now.isoformat()
 
@@ -125,12 +124,19 @@ class ResultExporter:
                     del grp[col]
                 ds = grp.create_dataset(col, data=data)
 
+                # Store time_unit as attribute on the Time dataset
+                if col == 'Time':
+                    ds.attrs['time_unit'] = time_unit
+
                 # Resolve peak_id from column name (e.g. "p0_center" -> "p0")
                 parts = col.split('_')
                 peak_id = parts[0] if len(parts) > 1 and parts[0].startswith('p') and parts[0][1:].isdigit() else None
-                info = peak_info_map.get(peak_id, {})
-                ds.attrs['peak_name']   = info.get('name', 'N/A')
-                ds.attrs['model_type']  = info.get('model_type', 'N/A')
+
+                # Only store peak_name and model_type if dataset starts with 'p' and contains no strings
+                if peak_id is not None and not any(isinstance(v, str) for v in data):
+                    info = peak_info_map.get(peak_id, {})
+                    ds.attrs['peak_name']   = info.get('name', 'N/A')
+                    ds.attrs['model_type']  = info.get('model_type', 'N/A')
 
         debug_print(f"Saved fitting results to {h5_path} under /fitting_results/{group_name}", "Exporter")
 
