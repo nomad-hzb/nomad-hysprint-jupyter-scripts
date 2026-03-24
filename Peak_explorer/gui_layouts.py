@@ -299,6 +299,19 @@ class GUILayouts:
         debug_print("Created fitting control section layout", "GUI")
         return section
     
+    def create_fit_visualisation_section(self):
+        """Create fit visualisation section with slider navigation"""
+        slider_row = widgets.HBox([
+            self.widgets['fit_vis_slider'],
+            self.widgets['fit_vis_show_components'],
+            self.widgets['fit_vis_label']
+        ])
+        return widgets.VBox([
+            widgets.HTML("<h4>Fit Visualisation</h4>"),
+            slider_row,
+            self.widgets['fit_vis_output']
+        ])
+
     def create_visualization_section(self):
         """Create visualization section"""
         section = widgets.VBox([
@@ -308,7 +321,8 @@ class GUILayouts:
             widgets.HTML("<h4>Current Spectrum</h4>"),
             self.widgets['spectrum_output'],
             widgets.HTML("<h4>Time Series Analysis</h4>"),
-            self.widgets['time_series_output']
+            self.widgets['time_series_output'],
+            self.create_fit_visualisation_section()
         ], layout=widgets.Layout(flex='2', width='auto'))
         
         debug_print("Created visualization section layout", "GUI")
@@ -387,6 +401,7 @@ class PLAnalysisApp:
         self.original_data_matrix = None  # For background subtraction
         self.background_applied = False
         self.background_accordion = None  # Reference to background accordion
+        self._fit_vis_indices = []  # Sorted list of successful fit result indices
         
         # Setup UI and connect callbacks
         self.setup_callbacks()
@@ -497,6 +512,12 @@ class PLAnalysisApp:
         
         self.widgets['wavelength_range_slider'].observe(on_wavelength_range_change, names='value')
         debug_print(f"Wavelength range callback connected to {self.widgets['wavelength_range_slider']}", "APP")
+
+        self.widgets['fit_vis_slider'].observe(self.on_fit_vis_slider_change, names='value')
+        self.widgets['fit_vis_show_components'].observe(
+            lambda change: self._update_fit_vis_plot(self.widgets['fit_vis_slider'].value),
+            names='value'
+        )
 
         debug_print("Callbacks setup complete", "APP")
 
@@ -1684,9 +1705,10 @@ class PLAnalysisApp:
                 self.widgets['time_series_output'].clear_output(wait=True)
 
             self.create_time_series_plots()
-            
+            self.refresh_fit_vis()
+
             debug_print("Time series plots refreshed", "APP")
-            
+
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"✅ Batch fitting completed!")
@@ -1773,9 +1795,10 @@ class PLAnalysisApp:
                 self.widgets['time_series_output'].clear_output(wait=True)
             
             self.create_time_series_plots()
-            
+            self.refresh_fit_vis()
+
             debug_print("Time series plots refreshed", "APP")
-            
+
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print(f"✅ Range fitting completed!")
@@ -1995,6 +2018,77 @@ class PLAnalysisApp:
             # Display the FigureWidget directly
             display(fig)
     
+    def refresh_fit_vis(self):
+        """Update fit visualisation slider and plot after fitting"""
+        if not self.fitting_engine.has_fitting_results():
+            return
+
+        self._fit_vis_indices = sorted([
+            idx for idx, r in self.fitting_engine.fitting_results.items()
+            if r and r.get('success', False)
+        ])
+
+        if not self._fit_vis_indices:
+            return
+
+        n = len(self._fit_vis_indices)
+        slider = self.widgets['fit_vis_slider']
+        # Temporarily disable observer to avoid double-trigger
+        slider.max = max(n - 1, 0)
+        slider.disabled = False
+        slider.value = 0
+
+        self._update_fit_vis_plot(0)
+
+    def on_fit_vis_slider_change(self, change):
+        """Handle fit visualisation slider change"""
+        self._update_fit_vis_plot(change['new'])
+
+    def _update_fit_vis_plot(self, slider_val):
+        """Display the fit result for the given slider position"""
+        if not self._fit_vis_indices or slider_val >= len(self._fit_vis_indices):
+            return
+
+        time_idx = self._fit_vis_indices[slider_val]
+        fit_result = self.fitting_engine.fitting_results.get(time_idx)
+
+        if fit_result is None or not fit_result.get('success', False):
+            return
+
+        # Wavelengths used during fitting
+        wavelengths = self.fitting_engine.fit_wavelengths
+        if wavelengths is None:
+            wavelengths = self.data_manager.wavelengths
+
+        # Raw intensities trimmed to fit wavelength range
+        raw_intensities = self.data_manager.data_matrix[time_idx]
+        if len(wavelengths) != len(raw_intensities):
+            full_wl = self.data_manager.wavelengths
+            mask = (full_wl >= wavelengths.min()) & (full_wl <= wavelengths.max())
+            raw_intensities = raw_intensities[mask]
+
+        # Update info label
+        time_val = fit_result.get('time', 0)
+        r2 = fit_result.get('r_squared', float('nan'))
+        self.widgets['fit_vis_label'].value = (
+            f"Index: {time_idx}  |  Time: {time_val:.3f} {self.data_manager.time_unit}  |  R²: {r2:.4f}"
+        )
+
+        show_components = self.widgets['fit_vis_show_components'].value
+        components = fit_result.get('components', {})
+        debug_print(f"FitVis: show_components={show_components}, stored components={list(components.keys())}", "APP")
+
+        fig = self.plot_manager.create_fit_vis_plot(
+            fit_result, wavelengths, raw_intensities,
+            wavelength_unit=self.wavelength_unit or 'nm',
+            time_unit=self.data_manager.time_unit,
+            show_components=show_components
+        )
+
+        with self.widgets['fit_vis_output']:
+            self.widgets['fit_vis_output'].clear_output(wait=True)
+            fig.show(renderer=config.PLOT_RENDERER)
+
     def create_time_series_plots(self):
         """Create time series plots from fitting results"""
         if not self.fitting_engine.has_fitting_results():

@@ -687,6 +687,8 @@ class PlotManager:
         for idx, result in fitting_results.items():
             if result is None or not result.get('success', False):
                 continue
+
+            # debug_print("Result: " + str(result), "PLOT")
             
             row = {
                 'index': int(result.get('index', idx)),
@@ -721,6 +723,119 @@ class PlotManager:
         df = df.sort_values('time').reset_index(drop=True)
         df['index'] = df['index'].astype(int)
         return df
+
+    def create_fit_vis_plot(self, fit_result, wavelengths, raw_intensities,
+                            wavelength_unit='nm', time_unit='s', show_components=False):
+        """
+        Create visualization of a stored fit result (using saved arrays, not a live lmfit object)
+
+        Parameters:
+        -----------
+        fit_result : dict
+            Single fitting result from fitting_engine.fitting_results
+        wavelengths : array
+            Wavelength values used during fitting
+        raw_intensities : array
+            Raw intensity values for this time index (trimmed to same range as wavelengths)
+        wavelength_unit : str
+        time_unit : str
+        show_components : bool
+            If True, plot individual peak/background components instead of only the total fit
+
+        Returns:
+        --------
+        plotly.graph_objects.Figure
+        """
+        fitted_curve = fit_result.get('fitted_curve')
+        residuals = fit_result.get('residuals')
+        components = fit_result.get('components', {})
+        time_val = fit_result.get('time', 0)
+        time_idx = fit_result.get('index', 0)
+        r2 = fit_result.get('r_squared', float('nan'))
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            subplot_titles=(
+                f'Fit Result  |  Index: {time_idx}  |  Time: {time_val:.3f} {time_unit}  |  R²: {r2:.4f}',
+                'Residuals'
+            ),
+            row_heights=[0.75, 0.25]
+        )
+
+        xaxis_label = (f"Wavelength ({wavelength_unit})" if wavelength_unit == 'nm'
+                       else f"Energy ({wavelength_unit})" if wavelength_unit == 'eV'
+                       else f"q ({wavelength_unit})")
+
+        # Raw data
+        fig.add_trace(go.Scatter(
+            x=wavelengths,
+            y=raw_intensities,
+            mode='lines',
+            name='Raw Data',
+            line=dict(color='black', width=2),
+            hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+        ), row=1, col=1)
+
+        # Total fitted curve
+        if fitted_curve is not None:
+            fig.add_trace(go.Scatter(
+                x=wavelengths,
+                y=fitted_curve,
+                mode='lines',
+                name='Total Fit',
+                line=dict(color='red', width=2, dash='dash'),
+                hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Fit: %{{y:.0f}}<extra></extra>"
+            ), row=1, col=1)
+
+        # Individual components
+        if show_components and components:
+            color_idx = 0
+            for comp_name, comp_values in components.items():
+                try:
+                    comp_arr = np.asarray(comp_values, dtype=float)
+                    if comp_arr.ndim != 1 or len(comp_arr) != len(wavelengths):
+                        debug_print(f"Skipping component {comp_name}: shape mismatch", "PLOT")
+                        continue
+                    label = comp_name.replace('_', ' ').strip()
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths,
+                        y=comp_arr,
+                        mode='lines',
+                        name=label,
+                        line=dict(color=self.visualization.peak_colors[color_idx % len(self.visualization.peak_colors)], width=2, dash='dot'),
+                        hovertemplate=f"{label}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+                    ), row=1, col=1)
+                    color_idx += 1
+                except Exception as e:
+                    debug_print(f"Error plotting component {comp_name}: {e}", "PLOT")
+
+        # Residuals
+        if residuals is not None:
+            fig.add_trace(go.Scatter(
+                x=wavelengths,
+                y=residuals,
+                mode='lines',
+                name='Residuals',
+                line=dict(color='blue', width=1.5),
+                hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Residual: %{{y:.0f}}<extra></extra>",
+                showlegend=False
+            ), row=2, col=1)
+
+        fig.update_layout(
+            height=config.SPECTRUM_HEIGHT,
+            width=config.SPECTRUM_WIDTH,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
+            hovermode='x unified'
+        )
+        fig.update_xaxes(title_text=xaxis_label, showgrid=True, gridcolor='lightgray', row=2, col=1)
+        fig.update_yaxes(title_text='Intensity', showgrid=True, gridcolor='lightgray', row=1, col=1)
+        fig.update_yaxes(title_text='Residual', showgrid=True, gridcolor='lightgray', row=2, col=1)
+
+        return fig
 
     # def export_plots(self, fitting_results, output_dir):
     #     """

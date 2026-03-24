@@ -418,6 +418,20 @@ class GUIComponents:
         self.widgets['heatmap_output'] = widgets.Output()
         self.widgets['spectrum_output'] = widgets.Output()
         self.widgets['time_series_output'] = widgets.Output()
+        self.widgets['fit_vis_output'] = widgets.Output()
+        self.widgets['fit_vis_slider'] = widgets.IntSlider(
+            value=0, min=0, max=0, step=1,
+            description='Spectrum:',
+            disabled=True,
+            layout=widgets.Layout(width='350px')
+        )
+        self.widgets['fit_vis_label'] = widgets.Label(value='No fit results available')
+        self.widgets['fit_vis_show_components'] = widgets.Checkbox(
+            value=False,
+            description='Show individual fits',
+            indent=False,
+            layout=widgets.Layout(width='180px')
+        )
         
         debug_print("Created output widgets", "GUI")
         return self.widgets

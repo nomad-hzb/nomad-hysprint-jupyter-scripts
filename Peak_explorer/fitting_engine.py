@@ -685,8 +685,11 @@ class FittingModels:
                 'peak_models': fit_params.get('peak_models', []),
                 'fitted_curve': result.best_fit,
                 'residuals': result.residual,
+                'components': result.eval_components() if hasattr(result, 'eval_components') else {},
                 'smart_init_used': use_smart_init
             }
+
+            # debug_print("Eval components: " + ", ".join(fit_summary['components']), "FITTING")
             
             # Extract parameter values
             for param_name, param in result.params.items():
