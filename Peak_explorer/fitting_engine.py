@@ -436,7 +436,7 @@ class FittingModels:
             
             # Set initial values based on UI input
             if peak_info['type'] == 'Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
             elif peak_info['type'] == 'Polynomial':
@@ -457,21 +457,21 @@ class FittingModels:
                 peak_params[f'p{i}_slope'].set(value=0.0)
                 peak_params[f'p{i}_intercept'].set(value=0.0)
             elif peak_info['type'] == 'Lorentzian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
             elif peak_info['type'] == 'Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
                 peak_params[f'p{i}_gamma'].set(value=peak_info['gamma'], min=0.001, max=100)
             elif peak_info['type'] == 'Skewed Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
                 peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
             elif peak_info['type'] == 'Skewed Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
+                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
                 peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
                 peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
                 peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
@@ -815,6 +815,7 @@ class FittingEngine:
         self.fit_params = None
         self.fitting_results = {}
         self.current_fit_result = None
+        self.fit_wavelengths = None  # Wavelengths used for last batch fit
         
     def detect_peaks(self, wavelengths, intensities, **detection_params):
         """
@@ -948,6 +949,8 @@ class FittingEngine:
         
         debug_print(f"Starting batch fit: {len(time_subset)} spectra, workers={max_workers}, smart_init={use_smart_init}", "FITTING")
         
+        self.fit_wavelengths = wavelengths
+
         results = self.fitting_models.fit_all_spectra(
             wavelengths,
             data_subset,
@@ -957,7 +960,7 @@ class FittingEngine:
             use_smart_init=use_smart_init,
             progress_callback=progress_callback
         )
-        
+
         # Store results (offset indices if fitting a range)
         if fit_range is not None:
             start_idx = fit_range[0]
