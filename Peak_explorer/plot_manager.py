@@ -524,38 +524,40 @@ class PlotManager:
     def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm', time_unit='s', name_map=None):
         if name_map is None:
             name_map = {}
+
+        # Determine y-axis unit from column suffix
+        if column_suffix in ('center', 'fwhm'):
+            y_unit = wavelength_unit
+        else:
+            y_unit = '-'
+
         fig = go.Figure()
         for i, peak_id in enumerate(peak_ids):
             selected_column = f'{peak_id}_{column_suffix}'
 
             if selected_column in df.columns:
                 display_name = name_map.get(peak_id, peak_id)
-                # Prepare custom_data with both index and time
                 custom_data = np.column_stack((df['index'].values, df['time'].values))
 
                 if i == 0:
-                    # First trace shows Time Index and Time
-                    fig.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[selected_column],
-                        mode='lines+markers',
-                        name=display_name,
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        customdata=custom_data,
-                        hovertemplate=f"<b>Time Index: %{{customdata[0]}}</b><br>Time: %{{customdata[1]:.2f}} {time_unit}<br><br>%{{fullData.name}}: %{{y:.3f}}<extra></extra>"
-                    ))
+                    hovertemplate = (
+                        f"<b>Time Index: %{{customdata[0]}}</b><br>"
+                        f"Time: %{{customdata[1]:.2f}} {time_unit}<br><br>"
+                        f"%{{fullData.name}}: %{{y:.3f}} {y_unit}<extra></extra>"
+                    )
                 else:
-                    # Other traces just show their value
-                    fig.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[selected_column],
-                        mode='lines+markers',
-                        name=display_name,
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
-                    ))
+                    hovertemplate = f"%{{fullData.name}}: %{{y:.3f}} {y_unit}<extra></extra>"
+
+                fig.add_trace(go.Scatter(
+                    x=df['time'],
+                    y=df[selected_column],
+                    mode='lines+markers',
+                    name=display_name,
+                    line=dict(width=2),
+                    marker=dict(size=6),
+                    customdata=custom_data,
+                    hovertemplate=hovertemplate
+                ))
 
         if column_suffix == "amplitude":
             title_suffix = "Area"
