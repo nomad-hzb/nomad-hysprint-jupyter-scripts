@@ -117,7 +117,7 @@ class Plotter:
 
         return fig
 
-    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', background_model=None):
+    def _build_spectrum_figure(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', background_model=None, name_map=None):
         """
         Create spectrum plot with optional fitting results
         Parameters:
@@ -183,20 +183,27 @@ class Plotter:
                 color_idx = 0
                 for comp_name, comp_values in components.items():
                     debug_print(f"  Processing component: {comp_name}, has {np.sum(~np.isnan(comp_values))} non-NaN values", "PLOT")
-                    
+
                     if comp_name != 'best_fit':
                         debug_print(f"  ✓ Adding trace for {comp_name}", "PLOT")
+                        prefix = comp_name.rstrip('_')
+                        if name_map and prefix.startswith('p') and prefix[1:].isdigit():
+                            label = name_map.get(prefix, prefix)
+                        elif name_map and prefix == 'bg':
+                            label = 'Background'
+                        else:
+                            label = comp_name.replace('_', ' ').title()
                         fig.add_trace(go.Scatter(
                             x=wavelengths,
                             y=comp_values,
                             mode='lines',
-                            name=comp_name.replace('_', ' ').title(),
+                            name=label,
                             line=dict(
                                 color=self.peak_colors[color_idx % len(self.peak_colors)],
                                 width=2,
                                 dash='dot'
                             ),
-                            hovertemplate=f"{comp_name}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+                            hovertemplate=f"{label}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
                         ), row=1, col=1)
                         color_idx += 1
                     else:
@@ -460,10 +467,10 @@ class PlotManager:
             debug_print(f"Error updating heatmap line: {e}", "PLOT")
             return None
     
-    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm'):
+    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', name_map=None):
         """
         Create spectrum plot with optional fit
-        
+
         Parameters:
         -----------
         wavelengths : array
@@ -474,15 +481,15 @@ class PlotManager:
             Fitting result to overlay
         wavelength_range : tuple, optional
             (min, max) wavelength range to highlight
-            
+
         Returns:
         --------
         plotly.graph_objects.Figure: Spectrum plot
         """
         debug_print(f"Creating spectrum plot (with_fit={fit_result is not None})", "PLOT")
-        
+
         import plotly.graph_objects as go
-    
+
         # Get background model if one exists
         background_model = None
         if hasattr(self, 'app_ref'):
@@ -497,14 +504,15 @@ class PlotManager:
                 debug_print("⚠ app_ref exists but no background_model attribute", "PLOT")
         else:
             debug_print("✗ No app_ref attribute on PlotManager", "PLOT")
-        
-        fig = self.visualization.create_spectrum_plot(
+
+        fig = self.visualization._build_spectrum_figure(
             wavelengths,
             intensities,
             fit_result=fit_result,
             wavelength_range=wavelength_range,
             wavelength_unit=wavelength_unit,
-            background_model=background_model
+            background_model=background_model,
+            name_map=name_map
         )
         
         # Convert to FigureWidget for dynamic updates
@@ -513,12 +521,15 @@ class PlotManager:
         return self.spectrum_fig
 
     @staticmethod
-    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm', time_unit='s'):
+    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm', time_unit='s', name_map=None):
+        if name_map is None:
+            name_map = {}
         fig = go.Figure()
         for i, peak_id in enumerate(peak_ids):
             selected_column = f'{peak_id}_{column_suffix}'
 
             if selected_column in df.columns:
+                display_name = name_map.get(peak_id, peak_id)
                 # Prepare custom_data with both index and time
                 custom_data = np.column_stack((df['index'].values, df['time'].values))
 
@@ -528,7 +539,7 @@ class PlotManager:
                         x=df['time'],
                         y=df[selected_column],
                         mode='lines+markers',
-                        name=f'{peak_id} center',
+                        name=display_name,
                         line=dict(width=2),
                         marker=dict(size=6),
                         customdata=custom_data,
@@ -540,7 +551,7 @@ class PlotManager:
                         x=df['time'],
                         y=df[selected_column],
                         mode='lines+markers',
-                        name=f'{peak_id} center',
+                        name=display_name,
                         line=dict(width=2),
                         marker=dict(size=6),
                         hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
@@ -595,39 +606,46 @@ class PlotManager:
         import plotly.graph_objects as go
         
         debug_print("Creating time series plots", "PLOT")
-        
+
+        # Build peak name map from first successful result
+        name_map = self._build_peak_name_map(fitting_results)
+
         # Extract peak parameters
         df = self._extract_parameters_for_plotting(fitting_results)
-        
+
         if df is None or df.empty:
             debug_print("No data available for time series plots", "PLOT")
             return []
-        
+
         figures = []
-        
+
         # Create plots for each peak
         peak_columns = [col for col in df.columns if col.startswith('p')]
         peak_ids = list(set([col.split('_')[0] for col in peak_columns]))
         peak_ids.sort()  # Sort to ensure consistent order
-        
+
         # Plot 1: Peak centers vs time
         fig_centers = self.create_single_plotly_figure(peak_ids, df, column_suffix='center',
-                                                       wavelength_unit=wavelength_unit, time_unit=time_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                       name_map=name_map)
         figures.append(fig_centers)
 
         # Plot 2: Peak areas vs time
         fig_areas = self.create_single_plotly_figure(peak_ids, df, column_suffix='amplitude',
-                                                     wavelength_unit=wavelength_unit, time_unit=time_unit)
+                                                     wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                     name_map=name_map)
         figures.append(fig_areas)
 
         # Plot 3: FWHM vs time
         fig_fwhm = self.create_single_plotly_figure(peak_ids, df, column_suffix='fwhm',
-                                                    wavelength_unit=wavelength_unit, time_unit=time_unit)
+                                                    wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                    name_map=name_map)
         figures.append(fig_fwhm)
 
         # Plot 4: Peak heights vs time
         fig_heights = self.create_single_plotly_figure(peak_ids, df, column_suffix='height',
-                                                       wavelength_unit=wavelength_unit, time_unit=time_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                       name_map=name_map)
         figures.append(fig_heights)
         
         # Plot 5: R-squared vs time
@@ -677,6 +695,15 @@ class PlotManager:
         debug_print(f"Created {len(figures)} time series plots", "PLOT")
         return figures
     
+    @staticmethod
+    def _build_peak_name_map(fitting_results):
+        """Build mapping {p0: name, p1: name, ...} from the first successful fit result"""
+        for result in fitting_results.values():
+            if result and result.get('success', False):
+                peak_models = result.get('peak_models', [])
+                return {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}
+        return {}
+
     def _extract_parameters_for_plotting(self, fitting_results):
         """Extract parameters from fitting results into DataFrame"""
         import pandas as pd
@@ -725,7 +752,7 @@ class PlotManager:
         return df
 
     def create_fit_vis_plot(self, fit_result, wavelengths, raw_intensities,
-                            wavelength_unit='nm', time_unit='s', show_components=False):
+                            wavelength_unit='nm', time_unit='s', show_components=False, name_map=None):
         """
         Create visualization of a stored fit result (using saved arrays, not a live lmfit object)
 
@@ -746,6 +773,10 @@ class PlotManager:
         --------
         plotly.graph_objects.Figure
         """
+        if name_map is None:
+            peak_models = fit_result.get('peak_models', [])
+            name_map = {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}
+
         fitted_curve = fit_result.get('fitted_curve')
         residuals = fit_result.get('residuals')
         components = fit_result.get('components', {})
@@ -798,7 +829,13 @@ class PlotManager:
                     if comp_arr.ndim != 1 or len(comp_arr) != len(wavelengths):
                         debug_print(f"Skipping component {comp_name}: shape mismatch", "PLOT")
                         continue
-                    label = comp_name.replace('_', ' ').strip()
+                    prefix = comp_name.rstrip('_')  # e.g. 'p0_' → 'p0', 'bg_' → 'bg'
+                    if prefix.startswith('p') and prefix[1:].isdigit():
+                        label = name_map.get(prefix, prefix)
+                    elif prefix == 'bg':
+                        label = 'Background'
+                    else:
+                        label = comp_name.replace('_', ' ').strip()
                     fig.add_trace(go.Scatter(
                         x=wavelengths,
                         y=comp_arr,

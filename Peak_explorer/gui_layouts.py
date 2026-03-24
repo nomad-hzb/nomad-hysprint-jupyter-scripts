@@ -1492,12 +1492,14 @@ class PLAnalysisApp:
                 # Pass wavelength range if limited
                 wl_range_display = wl_range if is_limited else None
                 
+                peak_name_map = {f'p{i}': pm._widgets['name'].value for i, pm in enumerate(self.peak_models)}
                 fig = self.plot_manager.create_spectrum_plot(
                     self.data_manager.wavelengths,
                     self.data_manager.get_current_spectrum(),
                     fit_result=plot_result,
                     wavelength_range=wl_range_display,
-                    wavelength_unit=self.wavelength_unit
+                    wavelength_unit=self.wavelength_unit,
+                    name_map=peak_name_map
                 )
 
                 display(fig)
@@ -2002,12 +2004,14 @@ class PLAnalysisApp:
             
             wl_range_display = wl_range if is_limited else None
             
+            peak_name_map = {f'p{i}': pm._widgets['name'].value for i, pm in enumerate(self.peak_models)}
             fig = self.plot_manager.create_spectrum_plot(
                 self.data_manager.wavelengths,
                 self.data_manager.get_current_spectrum(),
                 fit_result=fit_result,
                 wavelength_range=wl_range_display,
-                wavelength_unit=self.wavelength_unit
+                wavelength_unit=self.wavelength_unit,
+                name_map=peak_name_map
             )
             
             # Apply current wavelength range visualization BEFORE displaying
