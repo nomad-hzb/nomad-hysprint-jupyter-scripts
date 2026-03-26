@@ -720,7 +720,7 @@ class PlotManager:
             # debug_print("Result: " + str(result), "PLOT")
             
             row = {
-                'index': int(result.get('index', idx)),
+                'index': int(idx),
                 'time': result['time'],
                 'r_squared': result.get('r_squared', np.nan)
             }
