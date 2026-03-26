@@ -435,6 +435,14 @@ class FittingModels:
             peak_params = peak_model.make_params()
             
             # Set initial values based on UI input
+
+            def _amp_kwargs(h, s, factor):
+                """Convert user height bounds to lmfit amplitude bounds."""
+                kw = {'value': h * s * factor, 'min': peak_info.get('height_min', 0) * s * factor}
+                if 'height_max' in peak_info:
+                    kw['max'] = peak_info['height_max'] * s * factor
+                return kw
+
             if peak_info['type'] == 'Gaussian':
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
@@ -442,8 +450,7 @@ class FittingModels:
                     min=peak_info.get('center_min', max(c - 50, 1e-6)),
                     max=peak_info.get('center_max', c + 50))
                 peak_params[f'p{i}_amplitude'].set(
-                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
-                    min=peak_info.get('height_min', 0))
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
                     value=peak_info['sigma'],
                     min=peak_info.get('sigma_min', 0.00001),
@@ -472,8 +479,7 @@ class FittingModels:
                     min=peak_info.get('center_min', max(c - 50, 1e-6)),
                     max=peak_info.get('center_max', c + 50))
                 peak_params[f'p{i}_amplitude'].set(
-                    value=peak_info['height'] * peak_info['sigma'] * np.pi,
-                    min=peak_info.get('height_min', 0))
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.pi))
                 peak_params[f'p{i}_sigma'].set(
                     value=peak_info['sigma'],
                     min=peak_info.get('sigma_min', 0.00001),
@@ -485,8 +491,7 @@ class FittingModels:
                     min=peak_info.get('center_min', max(c - 50, 1e-6)),
                     max=peak_info.get('center_max', c + 50))
                 peak_params[f'p{i}_amplitude'].set(
-                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
-                    min=peak_info.get('height_min', 0))
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
                     value=peak_info['sigma'],
                     min=peak_info.get('sigma_min', 0.001),
@@ -502,8 +507,7 @@ class FittingModels:
                     min=peak_info.get('center_min', max(c - 50, 1e-6)),
                     max=peak_info.get('center_max', c + 50))
                 peak_params[f'p{i}_amplitude'].set(
-                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
-                    min=peak_info.get('height_min', 0))
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
                     value=peak_info['sigma'],
                     min=peak_info.get('sigma_min', 0.001),
@@ -519,8 +523,7 @@ class FittingModels:
                     min=peak_info.get('center_min', max(c - 50, 1e-6)),
                     max=peak_info.get('center_max', c + 50))
                 peak_params[f'p{i}_amplitude'].set(
-                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
-                    min=peak_info.get('height_min', 0))
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
                     value=peak_info['sigma'],
                     min=peak_info.get('sigma_min', 0.001),
