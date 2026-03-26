@@ -1946,20 +1946,31 @@ class PLAnalysisApp:
     # =========================================================================
 
     def on_save_into_h5(self, button):
-        debug_print("Start of saving results into h5", "APP")
-        if not self.fitting_engine.has_fitting_results():
+        debug_print("Save into H5 triggered", "SAVE_H5")
+
+        has_results = self.fitting_engine.has_fitting_results()
+        debug_print(f"has_fitting_results: {has_results}", "SAVE_H5")
+        if not has_results:
             with self.widgets['status_output']:
                 self.widgets['status_output'].clear_output()
                 print("❌ No fitting results to export. Please fit spectra first.")
             return
 
-        debug_print("Saving results", "APP")
+        h5_path = self.data_manager.h5_path
+        time_unit = self.data_manager.time_unit
+        h5_mode = self.data_manager.h5_mode
+        debug_print(f"h5_path: {h5_path}", "SAVE_H5")
+        debug_print(f"time_unit: {time_unit}", "SAVE_H5")
+        debug_print(f"h5_mode: {h5_mode}", "SAVE_H5")
+        debug_print(f"wavelength_unit: {self.wavelength_unit}", "SAVE_H5")
+        debug_print(f"fitting_results keys: {list(self.fitting_engine.fitting_results.keys())[:5]}", "SAVE_H5")
+
         try:
             self.export_utils.export_to_isa_h5(
                 self.fitting_engine.fitting_results,
-                self.data_manager.h5_path,
-                time_unit=self.data_manager.time_unit,
-                h5_mode=self.data_manager.h5_mode,
+                h5_path,
+                time_unit=time_unit,
+                h5_mode=h5_mode,
                 wavelength_unit=self.wavelength_unit
             )
             with self.widgets['status_output']:
@@ -1973,8 +1984,16 @@ class PLAnalysisApp:
             else:
                 with self.widgets['status_output']:
                     self.widgets['status_output'].clear_output()
-                    print(f"❌ Error saving to H5: {e}")
-            debug_print(f"OSError saving to H5: {e}", "APP")
+                    print(f"❌ OSError saving to H5: {e}")
+            debug_print(f"OSError saving to H5: {e}", "SAVE_H5")
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            debug_print(f"Unexpected error saving to H5: {e}\n{tb}", "SAVE_H5")
+            with self.widgets['status_output']:
+                self.widgets['status_output'].clear_output()
+                print(f"❌ Unexpected error saving to H5: {type(e).__name__}: {e}")
+                print(tb)
 
     def update_visualizations(self, update_heatmap: bool = False):
         """Update both heatmap and spectrum visualizations

@@ -237,8 +237,10 @@ class ResultExporter:
                     # if 'amplitude' in params and 'sigma' in params:
                         amplitude = params['amplitude']
                         sigma = params['sigma']
-                        amplitude_stderr = params.get('amplitude_stderr', np.nan)
-                        sigma_stderr = params.get('sigma_stderr', np.nan)
+                        amplitude_stderr = params.get('amplitude_stderr')
+                        amplitude_stderr = np.nan if amplitude_stderr is None else amplitude_stderr
+                        sigma_stderr = params.get('sigma_stderr')
+                        sigma_stderr = np.nan if sigma_stderr is None else sigma_stderr
 
                         # Calculate height from amplitude (for Gaussian)
                         height = amplitude / (sigma * np.sqrt(2 * np.pi))
