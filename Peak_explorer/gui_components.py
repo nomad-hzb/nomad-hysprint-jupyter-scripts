@@ -478,7 +478,7 @@ class GUIComponents:
             options=['Gaussian', 'Voigt', 'Lorentzian', 'Skewed Gaussian', 'Skewed Voigt', 'Linear', 'Polynomial'],
             value=peak_info.get('type', config.DEFAULT_PEAK_MODEL),
             description='',
-            layout=widgets.Layout(width='120px')
+            layout=widgets.Layout(width='105px')
         )
         
         # Remove button
@@ -531,7 +531,7 @@ class GUIComponents:
             description='⚙ Bounds',
             button_style='',
             tooltip='Show/hide parameter bounds',
-            layout=widgets.Layout(width='90px', height='28px')
+            layout=widgets.Layout(width='75px', height='28px')
         )
 
         # Min/max bounds inputs (empty string = no bound)
@@ -677,7 +677,7 @@ class GUIComponents:
             value=peak_info.get('name', f'p{peak_idx}'),
             description='',
             placeholder='Peak name',
-            layout=widgets.Layout(width='80px')
+            layout=widgets.Layout(width='65px')
         )
 
         # Row 1: Model label, type selector, name input, bounds toggle, remove button
