@@ -436,14 +436,23 @@ class FittingModels:
             
             # Set initial values based on UI input
             if peak_info['type'] == 'Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
+                    min=peak_info.get('height_min', 0))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.00001),
+                    max=peak_info.get('sigma_max', 100))
             elif peak_info['type'] == 'Polynomial':
                 # Polynomial - use fitted coefficients if available
                 degree = peak_info.get('poly_degree', 2)
                 fitted_coeffs = peak_info.get('fitted_coeffs', None)
-                
+
                 if fitted_coeffs and len(fitted_coeffs) >= degree + 1:
                     # Use previously fitted coefficients
                     for j in range(degree + 1):
@@ -457,26 +466,71 @@ class FittingModels:
                 peak_params[f'p{i}_slope'].set(value=0.0)
                 peak_params[f'p{i}_intercept'].set(value=0.0)
             elif peak_info['type'] == 'Lorentzian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    value=peak_info['height'] * peak_info['sigma'] * np.pi,
+                    min=peak_info.get('height_min', 0))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.00001),
+                    max=peak_info.get('sigma_max', 100))
             elif peak_info['type'] == 'Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info['gamma'], min=0.001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
+                    min=peak_info.get('height_min', 0))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info['gamma'],
+                    min=peak_info.get('gamma_min', 0.001),
+                    max=peak_info.get('gamma_max', 100))
             elif peak_info['type'] == 'Skewed Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
+                    min=peak_info.get('height_min', 0))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info.get('gamma', 0.0),
+                    min=peak_info.get('gamma_min', -10),
+                    max=peak_info.get('gamma_max', 10))
             elif peak_info['type'] == 'Skewed Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=max(peak_info['center']-50, 1e-6), max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    value=peak_info['height'] * peak_info['sigma'] * np.sqrt(2 * np.pi),
+                    min=peak_info.get('height_min', 0))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info.get('gamma', 0.0),
+                    min=peak_info.get('gamma_min', -10),
+                    max=peak_info.get('gamma_max', 10))
                 peak_params[f'p{i}_skew'].set(value=peak_info.get('skew', 0.0), min=-10, max=10)
-                
+
             params.update(peak_params)
             
         return model, params

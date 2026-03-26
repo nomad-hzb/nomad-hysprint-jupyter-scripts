@@ -1288,21 +1288,50 @@ class PLAnalysisApp:
                 peak_params['center'] = peak_model._widgets['center'].value
                 peak_params['height'] = peak_model._widgets['height'].value
                 peak_params['sigma'] = peak_model._widgets['sigma'].value
-                
+
                 # Add gamma for models that use it
                 if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
                     peak_params['gamma'] = peak_model._widgets['gamma'].value
-                
+
                 # Add fix flags
                 peak_params['fix_center'] = peak_model._widgets['fix_center'].value
                 peak_params['fix_height'] = peak_model._widgets['fix_height'].value
                 peak_params['fix_sigma'] = peak_model._widgets['fix_sigma'].value
-                
+
                 if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
                     peak_params['fix_gamma'] = peak_model._widgets['fix_gamma'].value
-            
+
+                # Add bounds (empty string = use default)
+                def _parse_bound(val):
+                    try:
+                        return float(val.strip())
+                    except (ValueError, AttributeError):
+                        return None
+
+                for key in ('center_min', 'center_max', 'height_min', 'height_max',
+                            'sigma_min', 'sigma_max'):
+                    v = _parse_bound(peak_model._widgets[key].value)
+                    if v is not None:
+                        peak_params[key] = v
+
+                if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
+                    for key in ('gamma_min', 'gamma_max'):
+                        v = _parse_bound(peak_model._widgets[key].value)
+                        if v is not None:
+                            peak_params[key] = v
+
             params['peak_models'].append(peak_params)
-        
+
+        # Print bounds summary to status output
+        bound_keys = ('center_min', 'center_max', 'height_min', 'height_max',
+                      'sigma_min', 'sigma_max', 'gamma_min', 'gamma_max')
+        with self.widgets['status_output']:
+            for i, pm in enumerate(params['peak_models']):
+                active_bounds = {k: pm[k] for k in bound_keys if k in pm}
+                if active_bounds:
+                    bounds_str = ', '.join(f"{k}={v:.4g}" for k, v in active_bounds.items())
+                    print(f"Model {i + 1} bounds: {bounds_str}")
+
         debug_print(f"Prepared fit parameters: {len(params['peak_models'])} models", "APP")
         return params
 
