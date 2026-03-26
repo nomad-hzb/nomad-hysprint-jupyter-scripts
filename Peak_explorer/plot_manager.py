@@ -21,7 +21,7 @@ class Plotter:
         self.colorscale = config.DEFAULT_COLORSCALE
         self.peak_colors = ['green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 
-    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm'):
+    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm', time_unit='s'):
         """
         Create heatmap visualization of PL data
 
@@ -56,7 +56,7 @@ class Plotter:
             y=wavelengths,
             colorscale=self.colorscale,
             colorbar=colorbar_cfg,
-            hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}}s<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
+            hovertemplate=f"Time Index: %{{pointNumber[1]}}<br>Time: %{{x:.2f}} {time_unit}<br>Wavelength: %{{y:.3f}} {wavelength_unit}<br>Intensity: %{{z:.0f}}<extra></extra>",
             name="PL Data"
         ))
 
@@ -66,7 +66,7 @@ class Plotter:
             fig.add_vline(
                 x=current_time,
                 line=dict(color="red", width=3),
-                annotation_text=f"t = {current_time:.3f}s",
+                annotation_text=f"t = {current_time:.3f} {time_unit}",
                 annotation_position="top",
                 annotation=dict(
                     font=dict(color="red", size=12, family="Arial Black"),
@@ -82,7 +82,7 @@ class Plotter:
                 text="Peak Analysis Heatmap",
                 font=dict(size=16, family="Arial", color="darkblue")
             ),
-            xaxis_title="Time (s)",
+            xaxis_title=f"Time ({time_unit})",
             yaxis_title=f"Wavelength ({wavelength_unit})" if wavelength_unit == 'nm' else f"Energy ({wavelength_unit})" if wavelength_unit == 'eV' else f"q ({wavelength_unit})",
             height=500,
             width=800,
@@ -117,7 +117,7 @@ class Plotter:
 
         return fig
 
-    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', background_model=None):
+    def _build_spectrum_figure(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', background_model=None, name_map=None):
         """
         Create spectrum plot with optional fitting results
         Parameters:
@@ -183,20 +183,27 @@ class Plotter:
                 color_idx = 0
                 for comp_name, comp_values in components.items():
                     debug_print(f"  Processing component: {comp_name}, has {np.sum(~np.isnan(comp_values))} non-NaN values", "PLOT")
-                    
+
                     if comp_name != 'best_fit':
                         debug_print(f"  ✓ Adding trace for {comp_name}", "PLOT")
+                        prefix = comp_name.rstrip('_')
+                        if name_map and prefix.startswith('p') and prefix[1:].isdigit():
+                            label = name_map.get(prefix, prefix)
+                        elif name_map and prefix == 'bg':
+                            label = 'Background'
+                        else:
+                            label = comp_name.replace('_', ' ').title()
                         fig.add_trace(go.Scatter(
                             x=wavelengths,
                             y=comp_values,
                             mode='lines',
-                            name=comp_name.replace('_', ' ').title(),
+                            name=label,
                             line=dict(
                                 color=self.peak_colors[color_idx % len(self.peak_colors)],
                                 width=2,
                                 dash='dot'
                             ),
-                            hovertemplate=f"{comp_name}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+                            hovertemplate=f"{label}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
                         ), row=1, col=1)
                         color_idx += 1
                     else:
@@ -386,7 +393,7 @@ class PlotManager:
         self.heatmap_fig = None
         self.spectrum_fig = None
         
-    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm'):
+    def create_heatmap(self, data_matrix, wavelengths, timestamps, current_time_idx=0, wavelength_unit='nm', time_unit='s'):
         """
         Create heatmap visualization as FigureWidget for efficient updates
         
@@ -415,7 +422,8 @@ class PlotManager:
             wavelengths,
             timestamps,
             current_time_idx=current_time_idx,
-            wavelength_unit=wavelength_unit
+            wavelength_unit=wavelength_unit,
+            time_unit=time_unit
         )
         
         # Convert to FigureWidget for efficient updates
@@ -459,10 +467,10 @@ class PlotManager:
             debug_print(f"Error updating heatmap line: {e}", "PLOT")
             return None
     
-    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm'):
+    def create_spectrum_plot(self, wavelengths, intensities, fit_result=None, wavelength_range=None, wavelength_unit='nm', name_map=None):
         """
         Create spectrum plot with optional fit
-        
+
         Parameters:
         -----------
         wavelengths : array
@@ -473,15 +481,15 @@ class PlotManager:
             Fitting result to overlay
         wavelength_range : tuple, optional
             (min, max) wavelength range to highlight
-            
+
         Returns:
         --------
         plotly.graph_objects.Figure: Spectrum plot
         """
         debug_print(f"Creating spectrum plot (with_fit={fit_result is not None})", "PLOT")
-        
+
         import plotly.graph_objects as go
-    
+
         # Get background model if one exists
         background_model = None
         if hasattr(self, 'app_ref'):
@@ -496,14 +504,15 @@ class PlotManager:
                 debug_print("⚠ app_ref exists but no background_model attribute", "PLOT")
         else:
             debug_print("✗ No app_ref attribute on PlotManager", "PLOT")
-        
-        fig = self.visualization.create_spectrum_plot(
+
+        fig = self.visualization._build_spectrum_figure(
             wavelengths,
             intensities,
             fit_result=fit_result,
             wavelength_range=wavelength_range,
             wavelength_unit=wavelength_unit,
-            background_model=background_model
+            background_model=background_model,
+            name_map=name_map
         )
         
         # Convert to FigureWidget for dynamic updates
@@ -511,50 +520,58 @@ class PlotManager:
         
         return self.spectrum_fig
 
-    def create_single_plotly_figure(self, peak_ids, df, column_suffix, wavelength_unit='nm'):
+    @staticmethod
+    def create_single_plotly_figure(peak_ids, df, column_suffix, wavelength_unit='nm', time_unit='s', name_map=None):
+        if name_map is None:
+            name_map = {}
+
+        # Determine y-axis unit from column suffix
+        if column_suffix in ('center', 'fwhm'):
+            y_unit = wavelength_unit
+        else:
+            y_unit = '-'
+
         fig = go.Figure()
         for i, peak_id in enumerate(peak_ids):
             selected_column = f'{peak_id}_{column_suffix}'
 
-            if column_suffix == "amplitude":
-                column_suffix = "Area"
-
             if selected_column in df.columns:
-                # Prepare custom_data with both index and time
+                display_name = name_map.get(peak_id, peak_id)
                 custom_data = np.column_stack((df['index'].values, df['time'].values))
 
                 if i == 0:
-                    # First trace shows Time Index and Time
-                    fig.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[selected_column],
-                        mode='lines+markers',
-                        name=f'{peak_id} center',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        customdata=custom_data,
-                        hovertemplate="<b>Time Index: %{custom_data[0]}</b><br>Time: %{custom_data[1]:.2f}s<br><br>%{fullData.name}: %{y:.3f}<extra></extra>"
-                    ))
+                    hovertemplate = (
+                        f"<b>Time Index: %{{customdata[0]}}</b><br>"
+                        f"Time: %{{customdata[1]:.2f}} {time_unit}<br><br>"
+                        f"%{{fullData.name}}: %{{y:.3f}} {y_unit}<extra></extra>"
+                    )
                 else:
-                    # Other traces just show their value
-                    fig.add_trace(go.Scatter(
-                        x=df['time'],
-                        y=df[selected_column],
-                        mode='lines+markers',
-                        name=f'{peak_id} center',
-                        line=dict(width=2),
-                        marker=dict(size=6),
-                        hovertemplate="%{fullData.name}: %{y:.3f}<extra></extra>"
-                    ))
+                    hovertemplate = f"%{{fullData.name}}: %{{y:.3f}} {y_unit}<extra></extra>"
 
-        if column_suffix == "center" or column_suffix == "fwhm":
-            y_axis_title = f"{column_suffix} ({wavelength_unit})"
+                fig.add_trace(go.Scatter(
+                    x=df['time'],
+                    y=df[selected_column],
+                    mode='lines+markers',
+                    name=display_name,
+                    line=dict(width=2),
+                    marker=dict(size=6),
+                    customdata=custom_data,
+                    hovertemplate=hovertemplate
+                ))
+
+        if column_suffix == "amplitude":
+            title_suffix = "Area"
         else:
-            y_axis_title = column_suffix + " (-)"
+            title_suffix = column_suffix
+
+        if title_suffix == "center" or title_suffix == "fwhm":
+            y_axis_title = f"{title_suffix} ({wavelength_unit})"
+        else:
+            y_axis_title = title_suffix + " (-)"
 
         fig.update_layout(
-            title=f"{column_suffix} vs Time",
-            xaxis_title="Time (s)",
+            title=f"{title_suffix} vs Time",
+            xaxis_title=f"Time ({time_unit})",
             yaxis_title=y_axis_title,
             height=400,
             template='plotly_white',
@@ -571,7 +588,7 @@ class PlotManager:
         )
         return fig
     
-    def create_time_series_plots(self, fitting_results, output_widget=None, wavelength_unit='nm'):
+    def create_time_series_plots(self, fitting_results, output_widget=None, wavelength_unit='nm', time_unit='s'):
         """
         Create time series plots from fitting results
         
@@ -591,39 +608,46 @@ class PlotManager:
         import plotly.graph_objects as go
         
         debug_print("Creating time series plots", "PLOT")
-        
+
+        # Build peak name map from first successful result
+        name_map = self._build_peak_name_map(fitting_results)
+
         # Extract peak parameters
         df = self._extract_parameters_for_plotting(fitting_results)
-        
+
         if df is None or df.empty:
             debug_print("No data available for time series plots", "PLOT")
             return []
-        
+
         figures = []
-        
+
         # Create plots for each peak
         peak_columns = [col for col in df.columns if col.startswith('p')]
         peak_ids = list(set([col.split('_')[0] for col in peak_columns]))
         peak_ids.sort()  # Sort to ensure consistent order
-        
+
         # Plot 1: Peak centers vs time
         fig_centers = self.create_single_plotly_figure(peak_ids, df, column_suffix='center',
-                                                       wavelength_unit=wavelength_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                       name_map=name_map)
         figures.append(fig_centers)
 
         # Plot 2: Peak areas vs time
         fig_areas = self.create_single_plotly_figure(peak_ids, df, column_suffix='amplitude',
-                                                     wavelength_unit=wavelength_unit)
+                                                     wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                     name_map=name_map)
         figures.append(fig_areas)
 
         # Plot 3: FWHM vs time
         fig_fwhm = self.create_single_plotly_figure(peak_ids, df, column_suffix='fwhm',
-                                                    wavelength_unit=wavelength_unit)
+                                                    wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                    name_map=name_map)
         figures.append(fig_fwhm)
-        
+
         # Plot 4: Peak heights vs time
         fig_heights = self.create_single_plotly_figure(peak_ids, df, column_suffix='height',
-                                                       wavelength_unit=wavelength_unit)
+                                                       wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                       name_map=name_map)
         figures.append(fig_heights)
         
         # Plot 5: R-squared vs time
@@ -641,12 +665,12 @@ class PlotManager:
                 line=dict(width=2, color='blue'),
                 marker=dict(size=6),
                 customdata=customdata,
-                hovertemplate="<b>Time Index: %{customdata[0]}</b><br>Time: %{customdata[1]:.2f}s<br><br>R²: %{y:.4f}<extra></extra>"
+                hovertemplate=f"<b>Time Index: %{{customdata[0]}}</b><br>Time: %{{customdata[1]:.2f}} {time_unit}<br><br>R²: %{{y:.4f}}<extra></extra>"
             ))
             
             fig_quality.update_layout(
                 title="Fitting Quality (R²) vs Time",
-                xaxis_title="Time (s)",
+                xaxis_title=f"Time ({time_unit})",
                 yaxis_title="R²",
                 height=400,
                 template='plotly_white',
@@ -673,6 +697,15 @@ class PlotManager:
         debug_print(f"Created {len(figures)} time series plots", "PLOT")
         return figures
     
+    @staticmethod
+    def _build_peak_name_map(fitting_results):
+        """Build mapping {p0: name, p1: name, ...} from the first successful fit result"""
+        for result in fitting_results.values():
+            if result and result.get('success', False):
+                peak_models = result.get('peak_models', [])
+                return {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}
+        return {}
+
     def _extract_parameters_for_plotting(self, fitting_results):
         """Extract parameters from fitting results into DataFrame"""
         import pandas as pd
@@ -683,9 +716,11 @@ class PlotManager:
         for idx, result in fitting_results.items():
             if result is None or not result.get('success', False):
                 continue
+
+            # debug_print("Result: " + str(result), "PLOT")
             
             row = {
-                'index': int(result.get('index', idx)),
+                'index': int(idx),
                 'time': result['time'],
                 'r_squared': result.get('r_squared', np.nan)
             }
@@ -717,21 +752,144 @@ class PlotManager:
         df = df.sort_values('time').reset_index(drop=True)
         df['index'] = df['index'].astype(int)
         return df
-    
-    def export_plots(self, fitting_results, output_dir):
+
+    def create_fit_vis_plot(self, fit_result, wavelengths, raw_intensities,
+                            wavelength_unit='nm', time_unit='s', show_components=False, name_map=None):
         """
-        Export time series plots to HTML files
-        
+        Create visualization of a stored fit result (using saved arrays, not a live lmfit object)
+
         Parameters:
         -----------
-        fitting_results : dict
-            Fitting results
-        output_dir : str
-            Output directory
+        fit_result : dict
+            Single fitting result from fitting_engine.fitting_results
+        wavelengths : array
+            Wavelength values used during fitting
+        raw_intensities : array
+            Raw intensity values for this time index (trimmed to same range as wavelengths)
+        wavelength_unit : str
+        time_unit : str
+        show_components : bool
+            If True, plot individual peak/background components instead of only the total fit
+
+        Returns:
+        --------
+        plotly.graph_objects.Figure
         """
-        debug_print(f"Exporting plots to {output_dir}", "PLOT")
-        
-        self.export_utils.export_plots(fitting_results, output_dir)
+        if name_map is None:
+            peak_models = fit_result.get('peak_models', [])
+            name_map = {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}
+
+        fitted_curve = fit_result.get('fitted_curve')
+        residuals = fit_result.get('residuals')
+        components = fit_result.get('components', {})
+        time_val = fit_result.get('time', 0)
+        time_idx = fit_result.get('index', 0)
+        r2 = fit_result.get('r_squared', float('nan'))
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            subplot_titles=(
+                f'Fit Result  |  Index: {time_idx}  |  Time: {time_val:.3f} {time_unit}  |  R²: {r2:.4f}',
+                'Residuals'
+            ),
+            row_heights=[0.75, 0.25]
+        )
+
+        xaxis_label = (f"Wavelength ({wavelength_unit})" if wavelength_unit == 'nm'
+                       else f"Energy ({wavelength_unit})" if wavelength_unit == 'eV'
+                       else f"q ({wavelength_unit})")
+
+        # Raw data
+        fig.add_trace(go.Scatter(
+            x=wavelengths,
+            y=raw_intensities,
+            mode='lines',
+            name='Raw Data',
+            line=dict(color='black', width=2),
+            hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+        ), row=1, col=1)
+
+        # Total fitted curve
+        if fitted_curve is not None:
+            fig.add_trace(go.Scatter(
+                x=wavelengths,
+                y=fitted_curve,
+                mode='lines',
+                name='Total Fit',
+                line=dict(color='red', width=2, dash='dash'),
+                hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Fit: %{{y:.0f}}<extra></extra>"
+            ), row=1, col=1)
+
+        # Individual components
+        if show_components and components:
+            color_idx = 0
+            for comp_name, comp_values in components.items():
+                try:
+                    comp_arr = np.asarray(comp_values, dtype=float)
+                    if comp_arr.ndim != 1 or len(comp_arr) != len(wavelengths):
+                        debug_print(f"Skipping component {comp_name}: shape mismatch", "PLOT")
+                        continue
+                    prefix = comp_name.rstrip('_')  # e.g. 'p0_' → 'p0', 'bg_' → 'bg'
+                    if prefix.startswith('p') and prefix[1:].isdigit():
+                        label = name_map.get(prefix, prefix)
+                    elif prefix == 'bg':
+                        label = 'Background'
+                    else:
+                        label = comp_name.replace('_', ' ').strip()
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths,
+                        y=comp_arr,
+                        mode='lines',
+                        name=label,
+                        line=dict(color=self.visualization.peak_colors[color_idx % len(self.visualization.peak_colors)], width=2, dash='dot'),
+                        hovertemplate=f"{label}<br>Wavelength: %{{x:.3f}} {wavelength_unit}<br>Intensity: %{{y:.0f}}<extra></extra>"
+                    ), row=1, col=1)
+                    color_idx += 1
+                except Exception as e:
+                    debug_print(f"Error plotting component {comp_name}: {e}", "PLOT")
+
+        # Residuals
+        if residuals is not None:
+            fig.add_trace(go.Scatter(
+                x=wavelengths,
+                y=residuals,
+                mode='lines',
+                name='Residuals',
+                line=dict(color='blue', width=1.5),
+                hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Residual: %{{y:.0f}}<extra></extra>",
+                showlegend=False
+            ), row=2, col=1)
+
+        fig.update_layout(
+            height=config.SPECTRUM_HEIGHT,
+            width=config.SPECTRUM_WIDTH,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
+            hovermode='x unified'
+        )
+        fig.update_xaxes(title_text=xaxis_label, showgrid=True, gridcolor='lightgray', row=2, col=1)
+        fig.update_yaxes(title_text='Intensity', showgrid=True, gridcolor='lightgray', row=1, col=1)
+        fig.update_yaxes(title_text='Residual', showgrid=True, gridcolor='lightgray', row=2, col=1)
+
+        return fig
+
+    # def export_plots(self, fitting_results, output_dir):
+    #     """
+    #     Export time series plots to HTML files
+    #
+    #     Parameters:
+    #     -----------
+    #     fitting_results : dict
+    #         Fitting results
+    #     output_dir : str
+    #         Output directory
+    #     """
+    #     debug_print(f"Exporting plots to {output_dir}", "PLOT")
+    #
+    #     self.export_utils.export_plots(fitting_results, output_dir)
     
     def get_current_heatmap(self):
         """Get current heatmap figure"""
