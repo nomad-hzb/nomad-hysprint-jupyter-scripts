@@ -3,6 +3,7 @@
 GUI layouts and main application class
 Assembles widgets into layouts and contains all application logic
 """
+import os
 import numpy as np
 import ipywidgets as widgets
 from IPython.display import display
@@ -72,6 +73,7 @@ class GUILayouts:
         if self.components.h5_available:
             section = widgets.VBox([
                 widgets.HTML("<h3>📁 Data Loading</h3>"),
+                self.widgets['h5_filename_label'],
                 self.widgets['mode_dropdown'],
                 widgets.HBox([
                     self.widgets['convert_energy_btn'],
@@ -666,6 +668,10 @@ class PLAnalysisApp:
                 
                 self.data_manager.load_from_h5(mode)
                 self.wavelength_unit = self.data_manager.unit
+                h5_path = self.data_manager.h5_path
+                if h5_path:
+                    filename = os.path.basename(h5_path)
+                    self.widgets['h5_filename_label'].value = f"<b>File:</b> {filename}"
                 self.update_ui_after_data_load()
                 self.update_visualizations(update_heatmap=True)
                 

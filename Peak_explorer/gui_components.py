@@ -19,6 +19,11 @@ class GUIComponents:
     def create_file_upload_widgets(self):
         """Create file upload related widgets"""
         if self.h5_available:
+            # H5 filename label
+            self.widgets['h5_filename_label'] = widgets.HTML(
+                value="",
+                layout=widgets.Layout(width='100%')
+            )
             # H5 mode dropdown (keep as is)
             mode_options = [(v, k) for k, v in config.H5_MODES.items()]
             self.widgets['mode_dropdown'] = widgets.Dropdown(
