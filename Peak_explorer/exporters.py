@@ -116,6 +116,7 @@ class ResultExporter:
             grp.attrs['max_index']   = max_index
             grp.attrs['h5_mode']     = h5_mode if h5_mode is not None else 'N/A'
             grp.attrs['created_at']  = now.isoformat()
+            # todo possibly at more parameters here
 
             # Parameters whose unit equals the x-axis (wavelength / q) unit
             position_params = {'center', 'sigma', 'gamma', 'fwhm',
