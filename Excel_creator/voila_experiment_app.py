@@ -147,6 +147,12 @@ class MinimalistExperimentBuilder:
             style={'description_width': 'initial'}
         )
         
+        self.include_readme_checkbox = widgets.Checkbox(
+            value=False,
+            description='Create README.md for annotations',
+            style={'description_width': 'initial'}
+        )
+        
         self.generate_button = widgets.Button(
             description='Generate Excel',
             button_style='success',
@@ -620,9 +626,19 @@ class MinimalistExperimentBuilder:
             download_html = self._create_download_link(excel_data, filename)
             
             self.download_area.value = download_html
-            
+
             with self.status_output:
                 print(f"🎯 Download link created for: {filename}")
+            
+            # Generate README if requested
+            if self.include_readme_checkbox.value:
+                readme_content = self._generate_readme()
+                readme_filename = f"README.md"
+                readme_html = self._create_readme_download_link(readme_content, readme_filename)
+                self.download_area.value += readme_html
+                
+                with self.status_output:
+                    print(f"📝 README file created: {readme_filename}")
                 
         except Exception as e:
             with self.status_output:
@@ -739,6 +755,70 @@ Process Sequence:
                 error_content += "\n"
             
             return error_content.encode('utf-8')
+
+    def _generate_readme(self):
+        """Generate README.md template"""
+        readme_template = f"""# Scientific Question
+(What specific hypothesis or question does this experiment address?)
+
+> Example: Does annealing temperature affect the VOC of triple-cation perovskite devices?
+
+---
+
+# Approach
+(Briefly describe the experimental design, key parameters, and any deviations from standard protocol.)
+
+## Conditions
+| Parameter | Value |
+|-----------|-------|
+| ... | ... |
+
+## Method
+"""
+    
+        # Add process sequence
+        for i, process in enumerate(self.current_sequence, 1):
+            readme_template += f"{i}. {process['process']}"
+            if 'config' in process and process['config']:
+                config_str = ', '.join([f"{k}={v}" for k, v in process['config'].items()])
+                readme_template += f" ({config_str})"
+            readme_template += "\n"
+        
+        readme_template += """
+---
+
+# Results
+(Summarize the key outputs. Link to data files or NOMAD entries where relevant.)
+
+- **Key finding:** ...
+- **Data location:** `path/to/data` or [NOMAD entry](#)
+
+---
+
+# Learnings
+(What do the results tell you? What was surprising or confirmed?)
+
+## Interpretation
+...
+
+## Caveats / Limitations
+- ...
+
+---
+
+# Next Steps
+(Concrete follow-up actions, not just observations.)
+- [ ] Task one (owner, deadline)
+- [ ] Task two
+
+---
+
+# References
+- Related experiments: [link]
+- Protocol used: [link]
+"""
+        
+        return readme_template
         
     def _create_download_link(self, excel_data, filename):
         """Create download link"""
@@ -757,6 +837,27 @@ Process Sequence:
                download="{filename}" 
                style="display: inline-block; padding: 8px 16px; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">
                 📥 Download
+            </a>
+        </div>
+        """
+
+    def _create_readme_download_link(self, readme_content, filename):
+        """Create download link for README file"""
+        b64_data = base64.b64encode(readme_content.encode('utf-8')).decode()
+        
+        return f"""
+        <div style="padding: 12px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 6px; margin: 10px 0;">
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 18px; margin-right: 8px;">📝</span>
+                <strong style="color: #004085;">README Template</strong>
+            </div>
+            <div style="font-size: 14px; color: #004085; margin-bottom: 10px;">
+                {filename} • Experiment documentation template
+            </div>
+            <a href="data:text/markdown;base64,{b64_data}" 
+               download="{filename}" 
+               style="display: inline-block; padding: 8px 16px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">
+                📥 Download README
             </a>
         </div>
         """
@@ -794,8 +895,11 @@ Process Sequence:
         # Generation - compact
         generation_section = widgets.VBox([
             widgets.HTML(value="<h4 style='margin: 15px 0 8px 0; color: #2c3e50;'>📊 Generate</h4>"),
-            widgets.HBox([
+            widgets.VBox([
                 self.is_testing_checkbox,
+                self.include_readme_checkbox
+            ], layout=widgets.Layout(margin='0 0 10px 0')),
+            widgets.HBox([
                 self.generate_button
             ], layout=widgets.Layout(margin='0 0 10px 0')),
             self.download_area
