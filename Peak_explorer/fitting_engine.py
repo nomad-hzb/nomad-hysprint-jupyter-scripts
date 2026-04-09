@@ -435,15 +435,31 @@ class FittingModels:
             peak_params = peak_model.make_params()
             
             # Set initial values based on UI input
+
+            def _amp_kwargs(h, s, factor):
+                """Convert user height bounds to lmfit amplitude bounds."""
+                kw = {'value': h * s * factor, 'min': peak_info.get('height_min', 0) * s * factor}
+                if 'height_max' in peak_info:
+                    kw['max'] = peak_info['height_max'] * s * factor
+                return kw
+
             if peak_info['type'] == 'Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.00001),
+                    max=peak_info.get('sigma_max', 100))
             elif peak_info['type'] == 'Polynomial':
                 # Polynomial - use fitted coefficients if available
                 degree = peak_info.get('poly_degree', 2)
                 fitted_coeffs = peak_info.get('fitted_coeffs', None)
-                
+
                 if fitted_coeffs and len(fitted_coeffs) >= degree + 1:
                     # Use previously fitted coefficients
                     for j in range(degree + 1):
@@ -457,26 +473,67 @@ class FittingModels:
                 peak_params[f'p{i}_slope'].set(value=0.0)
                 peak_params[f'p{i}_intercept'].set(value=0.0)
             elif peak_info['type'] == 'Lorentzian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.pi, min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.00001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.pi))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.00001),
+                    max=peak_info.get('sigma_max', 100))
             elif peak_info['type'] == 'Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info['gamma'], min=0.001, max=100)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info['gamma'],
+                    min=peak_info.get('gamma_min', 0.001),
+                    max=peak_info.get('gamma_max', 100))
             elif peak_info['type'] == 'Skewed Gaussian':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info.get('gamma', 0.0),
+                    min=peak_info.get('gamma_min', -10),
+                    max=peak_info.get('gamma_max', 10))
             elif peak_info['type'] == 'Skewed Voigt':
-                peak_params[f'p{i}_center'].set(value=peak_info['center'], min=peak_info['center']-50, max=peak_info['center']+50)
-                peak_params[f'p{i}_amplitude'].set(value=peak_info['height']*peak_info['sigma']*np.sqrt(2*np.pi), min=0)
-                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=0.001, max=100)
-                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=-10, max=10)
+                c = peak_info['center']
+                peak_params[f'p{i}_center'].set(
+                    value=c,
+                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
+                    max=peak_info.get('center_max', c + 50))
+                peak_params[f'p{i}_amplitude'].set(
+                    **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
+                peak_params[f'p{i}_sigma'].set(
+                    value=peak_info['sigma'],
+                    min=peak_info.get('sigma_min', 0.001),
+                    max=peak_info.get('sigma_max', 100))
+                peak_params[f'p{i}_gamma'].set(
+                    value=peak_info.get('gamma', 0.0),
+                    min=peak_info.get('gamma_min', -10),
+                    max=peak_info.get('gamma_max', 10))
                 peak_params[f'p{i}_skew'].set(value=peak_info.get('skew', 0.0), min=-10, max=10)
-                
+
             params.update(peak_params)
             
         return model, params
@@ -682,10 +739,14 @@ class FittingModels:
                 'aic': getattr(result, 'aic', None),
                 'bic': getattr(result, 'bic', None),
                 'parameters': {},
+                'peak_models': fit_params.get('peak_models', []),
                 'fitted_curve': result.best_fit,
                 'residuals': result.residual,
+                'components': result.eval_components() if hasattr(result, 'eval_components') else {},
                 'smart_init_used': use_smart_init
             }
+
+            # debug_print("Eval components: " + ", ".join(fit_summary['components']), "FITTING")
             
             # Extract parameter values
             for param_name, param in result.params.items():
@@ -814,6 +875,7 @@ class FittingEngine:
         self.fit_params = None
         self.fitting_results = {}
         self.current_fit_result = None
+        self.fit_wavelengths = None  # Wavelengths used for last batch fit
         
     def detect_peaks(self, wavelengths, intensities, **detection_params):
         """
@@ -947,6 +1009,8 @@ class FittingEngine:
         
         debug_print(f"Starting batch fit: {len(time_subset)} spectra, workers={max_workers}, smart_init={use_smart_init}", "FITTING")
         
+        self.fit_wavelengths = wavelengths
+
         results = self.fitting_models.fit_all_spectra(
             wavelengths,
             data_subset,
@@ -956,7 +1020,7 @@ class FittingEngine:
             use_smart_init=use_smart_init,
             progress_callback=progress_callback
         )
-        
+
         # Store results (offset indices if fitting a range)
         if fit_range is not None:
             start_idx = fit_range[0]
