@@ -496,7 +496,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned', 'absorbance')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -554,6 +554,16 @@ class H5DataLoader:
                 timestamps, y_values = get_axes_from_extent(extent, data_matrix)
                 unit = "nm"
                 time_unit = "s"
+
+            elif mode == "absorbance":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
+                time_unit = "-"
+                ref_mask = (timestamps >= 1) & (timestamps <= 6)
+                t_ref = data_matrix[ref_mask, :].mean(axis=0, keepdims=True)
+                data_matrix = -np.log(data_matrix / t_ref)
 
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
