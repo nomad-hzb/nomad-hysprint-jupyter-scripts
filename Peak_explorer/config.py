@@ -86,7 +86,8 @@ H5_MODES = {
     'giwaxs': 'GIWAXS',
     'transmission_raw': 'Transmission raw',
     'transmission_binned': 'Transmission binned & bgs',
-    'absorbance': 'Absorbance'
+    'absorbance_raw': 'Absorbance raw',
+    'absorbance_binned': 'Absorbance binned & bgs'
 }
 DEFAULT_H5_MODE = 'giwaxs'
 

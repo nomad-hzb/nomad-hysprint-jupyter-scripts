@@ -2023,10 +2023,17 @@ class PLAnalysisApp:
 
         # Check if heatmap already exists
         if self.plot_manager.heatmap_fig is None or update_heatmap:
+            # Flip colorscale for absorbance modes (only when H5 data is loaded)
+            mode = self.data_manager.h5_mode
+            if mode is not None and mode in ('absorbance_raw', 'absorbance_binned'):
+                self.plot_manager.visualization.colorscale = config.DEFAULT_COLORSCALE + '_r'
+            else:
+                self.plot_manager.visualization.colorscale = config.DEFAULT_COLORSCALE
+
             # Create heatmap for the first time
             with self.widgets['heatmap_output']:
                 self.widgets['heatmap_output'].clear_output()
-                
+
                 fig = self.plot_manager.create_heatmap(
                     self.data_manager.data_matrix,
                     self.data_manager.wavelengths,
