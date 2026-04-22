@@ -6,7 +6,7 @@ Configuration settings for Photoluminescence Analysis App
 # =============================================================================
 # DEBUG SETTINGS
 # =============================================================================
-DEBUG_MODE = False  # Set to True to enable debug output throughout the app
+DEBUG_MODE = True  # Set to True to enable debug output throughout the app
 
 # =============================================================================
 # UI SETTINGS
@@ -49,6 +49,10 @@ PEAK_DETECTION_DEFAULTS = {
 # Fitting defaults
 DEFAULT_BACKGROUND_MODEL = 'Linear'
 DEFAULT_PEAK_MODEL = 'Gaussian'
+
+# Default half-width of the center parameter search window (nm).
+# Increase if peaks shift by more than this between the initial guess and the fit.
+DEFAULT_CENTER_BOUND = 300
 
 # Background handling
 BACKGROUND_OPTIONS = ['None', 'Manual', 'Linear', 'Polynomial', 'Exponential', 'Custom']

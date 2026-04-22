@@ -273,6 +273,7 @@ class GUILayouts:
                 self.widgets['fit_end_idx']
             ]),
             widgets.HTML("<b>Batch Actions:</b>"),
+            self.widgets['fit_sequential_checkbox'],
             widgets.HBox([
                 self.widgets['fit_all_btn'],
                 self.widgets['fit_all_range_btn']
@@ -1687,10 +1688,12 @@ class PLAnalysisApp:
                 debug_print("Batch fitting full wavelength range", "APP")
             
             # Perform batch fitting
+            fit_sequential = self.widgets['fit_sequential_checkbox'].value
             results = self.fitting_engine.fit_all_spectra(
                 wavelengths_fit,
                 data_matrix_fit,
-                self.data_manager.timestamps
+                self.data_manager.timestamps,
+                use_smart_init=fit_sequential
             )
             
             # Count successful fits
@@ -1779,11 +1782,13 @@ class PLAnalysisApp:
                 debug_print("Range fitting full wavelength range", "APP")
             
             # Perform batch fitting on range with progress callback
+            fit_sequential = self.widgets['fit_sequential_checkbox'].value
             results = self.fitting_engine.fit_all_spectra(
                 wavelengths_fit,
                 data_matrix_fit,
                 self.data_manager.timestamps,
-                fit_range=(start_idx, end_idx)
+                fit_range=(start_idx, end_idx),
+                use_smart_init=fit_sequential
             )
             
             # Count successful fits
@@ -2053,10 +2058,7 @@ class PLAnalysisApp:
         if not self.fitting_engine.has_fitting_results():
             return
 
-        self._fit_vis_indices = sorted([
-            idx for idx, r in self.fitting_engine.fitting_results.items()
-            if r and r.get('success', False)
-        ])
+        self._fit_vis_indices = sorted(self.fitting_engine.fitting_results.keys())
 
         if not self._fit_vis_indices:
             return
@@ -2082,8 +2084,17 @@ class PLAnalysisApp:
         time_idx = self._fit_vis_indices[slider_val]
         fit_result = self.fitting_engine.fitting_results.get(time_idx)
 
-        if fit_result is None or not fit_result.get('success', False):
+        if fit_result is None:
             return
+
+        success = fit_result.get('success', False)
+        time_val = fit_result.get('time', 0)
+        r2 = fit_result.get('r_squared', float('nan'))
+        status = "" if success else "  |  FIT FAILED"
+        self.widgets['fit_vis_label'].value = (
+            f"Index: {time_idx}  |  Time: {time_val:.3f} {self.data_manager.time_unit}"
+            f"  |  R²: {r2:.4f}{status}"
+        )
 
         # Raw intensities trimmed to the finite wavelengths used during fitting
         fit_x = fit_result.get('fit_x')
@@ -2094,19 +2105,13 @@ class PLAnalysisApp:
             raw_intensities = raw_intensities[mask]
         wavelengths = fit_x if fit_x is not None else full_wl
 
-        # Update info label
-        time_val = fit_result.get('time', 0)
-        r2 = fit_result.get('r_squared', float('nan'))
-        self.widgets['fit_vis_label'].value = (
-            f"Index: {time_idx}  |  Time: {time_val:.3f} {self.data_manager.time_unit}  |  R²: {r2:.4f}"
-        )
-
         show_components = self.widgets['fit_vis_show_components'].value
         components = fit_result.get('components', {})
-        debug_print(f"FitVis: show_components={show_components}, stored components={list(components.keys())}", "APP")
+        debug_print(f"FitVis: success={success}, show_components={show_components}, stored components={list(components.keys())}", "APP")
 
+        # Pass None fit_result for failed frames so the plotter only draws raw data
         fig = self.plot_manager.create_fit_vis_plot(
-            fit_result, wavelengths, raw_intensities,
+            fit_result if success else None, wavelengths, raw_intensities,
             wavelength_unit=self.wavelength_unit or 'nm',
             time_unit=self.data_manager.time_unit,
             show_components=show_components

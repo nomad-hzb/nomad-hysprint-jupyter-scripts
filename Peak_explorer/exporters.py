@@ -126,7 +126,9 @@ class ResultExporter:
 
             # One dataset per column
             for col in combined_df.columns:
-                data = combined_df[col].values
+                import pandas as pd
+                series = pd.to_numeric(combined_df[col], errors='coerce')
+                data = series.values.astype(float)
                 if col in grp:
                     del grp[col]
                 ds = grp.create_dataset(col, data=data)

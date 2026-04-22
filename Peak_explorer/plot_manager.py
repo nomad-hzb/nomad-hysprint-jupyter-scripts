@@ -777,6 +777,21 @@ class PlotManager:
         --------
         plotly.graph_objects.Figure
         """
+        if fit_result is None:
+            # Failed fit — return a raw-data-only figure with no fit overlay
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=wavelengths, y=raw_intensities,
+                mode='lines', name='Raw Data',
+                line=dict(color='black', width=2)
+            ))
+            fig.update_layout(
+                height=config.SPECTRUM_HEIGHT, width=config.SPECTRUM_WIDTH,
+                template='plotly_white',
+                title='Fit failed — raw data only'
+            )
+            return fig
+
         if name_map is None:
             peak_models = fit_result.get('peak_models', [])
             name_map = {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}

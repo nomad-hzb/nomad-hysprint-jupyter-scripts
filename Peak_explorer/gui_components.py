@@ -350,6 +350,13 @@ class GUIComponents:
     
     def create_batch_fitting_widgets(self):
         """Create batch fitting widgets"""
+        self.widgets['fit_sequential_checkbox'] = widgets.Checkbox(
+            value=False,
+            description='Fit sequential (use previous result as start values)',
+            style={'description_width': 'initial'},
+            layout=widgets.Layout(width='100%')
+        )
+
         self.widgets['fit_all_btn'] = widgets.Button(
             description='▶️ Fit All Spectra',
             button_style='warning',

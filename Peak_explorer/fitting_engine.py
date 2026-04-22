@@ -447,8 +447,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
-                    max=peak_info.get('center_max', c + 50))
+                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
+                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -476,8 +476,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
-                    max=peak_info.get('center_max', c + 50))
+                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
+                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.pi))
                 peak_params[f'p{i}_sigma'].set(
@@ -488,8 +488,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
-                    max=peak_info.get('center_max', c + 50))
+                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
+                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -504,8 +504,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
-                    max=peak_info.get('center_max', c + 50))
+                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
+                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -520,8 +520,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - 50, 1e-6)),
-                    max=peak_info.get('center_max', c + 50))
+                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
+                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -602,118 +602,83 @@ class FittingModels:
         """
         if max_workers is None:
             max_workers = min(mp.cpu_count(), len(timestamps))
-            
-        # Store for smart initialization
-        self.previous_results = {}
-        
-        # Prepare arguments for parallel processing
-        fit_args = []
-        for i, (time, spectrum) in enumerate(zip(timestamps, data_matrix)):
-            # For smart initialization, include nearby results
-            smart_params = fit_params.copy() if not use_smart_init else self._get_smart_init_params(fit_params, i, timestamps)
-            fit_args.append((i, time, wavelengths, spectrum, smart_params, use_smart_init))
-            
-        # Perform parallel fitting with progress tracking
+
         results = {}
         completed_count = 0
-        
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all fitting tasks
-            future_to_idx = {
-                executor.submit(self._fit_single_spectrum_worker_smart, args): args[0] 
-                for args in fit_args
-            }
-            
-            # Collect results with progress bar and smart updates
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                try:
-                    result = future.result()
-                    results[idx] = result
-                    
-                    # Store successful results for smart initialization
-                    if result and result.get('success', False) and use_smart_init:
-                        self.previous_results[idx] = result
-                        
+
+        if use_smart_init:
+            # Sequential fitting: each frame uses the previous successful result as
+            # start values. Parallelism is incompatible with this sequential dependency.
+            last_successful_result = None
+            for i, (time, spectrum) in enumerate(zip(timestamps, data_matrix)):
+                current_params = self._apply_smart_init(fit_params, last_successful_result)
+                args = (i, time, wavelengths, spectrum, current_params, True)
+                result = self._fit_single_spectrum_worker_smart(args)
+                results[i] = result
+                if result and result.get('success', False):
+                    last_successful_result = result
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, len(timestamps))
+        else:
+            # Parallel fitting when smart init is not needed
+            fit_args = [
+                (i, time, wavelengths, spectrum, fit_params, False)
+                for i, (time, spectrum) in enumerate(zip(timestamps, data_matrix))
+            ]
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                future_to_idx = {
+                    executor.submit(self._fit_single_spectrum_worker_smart, args): args[0]
+                    for args in fit_args
+                }
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        results[idx] = future.result()
+                    except Exception as e:
+                        print(f"Error fitting spectrum {idx}: {e}")
+                        results[idx] = None
                     completed_count += 1
-                    
-                    # Call progress callback if provided
                     if progress_callback:
                         progress_callback(completed_count, len(fit_args))
-                        
-                except Exception as e:
-                    print(f"Error fitting spectrum {idx}: {e}")
-                    results[idx] = None
-                    completed_count += 1
-                    
-                    if progress_callback:
-                        progress_callback(completed_count, len(fit_args))
-                    
+
         return results
         
-    def _get_smart_init_params(self, base_params, current_idx, timestamps, search_radius=5):
+    def _apply_smart_init(self, base_params, previous_result):
         """
-        Get smart initialization parameters based on nearby successful fits
-        
-        Parameters:
-        -----------
-        base_params : dict
-            Base fitting parameters
-        current_idx : int
-            Current time index
-        timestamps : array
-            Time values
-        search_radius : int
-            Number of nearby indices to search for good initial values
-            
-        Returns:
-        --------
-        dict: Optimized initial parameters
+        Return a copy of base_params with peak center/sigma/height seeded from
+        the previous successful fit result. If previous_result is None the
+        base_params are returned unchanged.
         """
-        if not hasattr(self, 'previous_results') or not self.previous_results:
+        if previous_result is None:
+            debug_print("Smart init: no previous result, using base params", "FITTING")
             return base_params
-            
-        # Find closest successful fit
-        closest_result = None
-        min_distance = float('inf')
-        
-        for idx, result in self.previous_results.items():
-            if result and result.get('success', False):
-                distance = abs(idx - current_idx)
-                if distance < min_distance and distance <= search_radius:
-                    min_distance = distance
-                    closest_result = result
-                    
-        if closest_result is None:
-            return base_params
-            
-        # Extract parameters from closest result
-        smart_params = base_params.copy()
-        closest_fitted_params = closest_result.get('parameters', {})
-        
-        # Update peak model parameters with fitted values
+
+        import copy
+        smart_params = copy.deepcopy(base_params)
+        fitted_params = previous_result.get('parameters', {})
+
         for i, peak_model in enumerate(smart_params['peak_models']):
-            peak_prefix = f'p{i}_'
-            
-            # Update center
-            center_param = f'{peak_prefix}center'
-            if center_param in closest_fitted_params:
-                peak_model['center'] = closest_fitted_params[center_param]['value']
-                
-            # Update sigma
-            sigma_param = f'{peak_prefix}sigma'
-            if sigma_param in closest_fitted_params:
-                peak_model['sigma'] = closest_fitted_params[sigma_param]['value']
-                
-            # Update height (converted from amplitude)
-            amplitude_param = f'{peak_prefix}amplitude'
-            if amplitude_param in closest_fitted_params and sigma_param in closest_fitted_params:
-                amplitude = closest_fitted_params[amplitude_param]['value']
-                sigma = closest_fitted_params[sigma_param]['value']
+            prefix = f'p{i}_'
+
+            center_key = f'{prefix}center'
+            if center_key in fitted_params:
+                old_center = peak_model['center']
+                peak_model['center'] = fitted_params[center_key]['value']
+                debug_print(f"Smart init p{i}: center {old_center:.2f} -> {peak_model['center']:.2f}", "FITTING")
+
+            sigma_key = f'{prefix}sigma'
+            if sigma_key in fitted_params:
+                peak_model['sigma'] = fitted_params[sigma_key]['value']
+
+            amplitude_key = f'{prefix}amplitude'
+            if amplitude_key in fitted_params and sigma_key in fitted_params:
+                amplitude = fitted_params[amplitude_key]['value']
+                sigma = fitted_params[sigma_key]['value']
                 if sigma > 0:
-                    height = amplitude / (sigma * np.sqrt(2 * np.pi))
-                    peak_model['height'] = height
-                    
+                    peak_model['height'] = amplitude / (sigma * np.sqrt(2 * np.pi))
+
+        debug_print(f"Smart init: seeded from idx={previous_result.get('index')} t={previous_result.get('time', 0):.3f}", "FITTING")
         return smart_params
         
     @staticmethod
@@ -1055,7 +1020,17 @@ class FittingEngine:
                 elif 'error' in r:
                     debug_print(f"  idx={idx} t={r.get('time', '?'):.3f}: exception: {r['error']}", "FITTING")
                 else:
-                    debug_print(f"  idx={idx} t={r.get('time', '?'):.3f}: lmfit success=False (redchi={r.get('reduced_chi_squared', '?')})", "FITTING")
+                    r2 = r.get('r_squared', float('nan'))
+                    redchi = r.get('reduced_chi_squared', float('nan'))
+                    # Detect parameters that hit their bounds
+                    at_bounds = [
+                        f"{name}={'min' if abs(p['value'] - p['min']) < 1e-6 else 'max'}"
+                        for name, p in r.get('parameters', {}).items()
+                        if abs(p['value'] - p['min']) < 1e-6 or abs(p['value'] - p['max']) < 1e-6
+                    ]
+                    bound_str = f", at bounds: {at_bounds}" if at_bounds else ""
+                    debug_print(f"  idx={idx} t={r.get('time', '?'):.3f}: lmfit success=False "
+                                f"(R²={r2:.4f}, redchi={redchi:.4f}{bound_str})", "FITTING")
 
         return self.fitting_results
     
