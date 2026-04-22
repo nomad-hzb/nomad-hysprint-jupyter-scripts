@@ -557,13 +557,24 @@ class FittingModels:
         """
         # Create composite model
         model, params = self.create_composite_model(fit_params)
-        
+
         if model is None:
             raise ValueError("Model creation failed")
-        
-        # Perform fitting
-        result = model.fit(intensities, params, x=wavelengths)
-        
+
+        # Strip non-finite values (nan/inf) before fitting
+        finite_mask = np.isfinite(intensities)
+        wl_fit = wavelengths[finite_mask]
+        int_fit = intensities[finite_mask]
+
+        if len(int_fit) == 0:
+            raise ValueError("No finite data points to fit (all nan/inf)")
+
+        # Perform fitting on finite points only
+        result = model.fit(int_fit, params, x=wl_fit)
+
+        # Attach the filtered x-axis so callers can reconstruct full-length arrays
+        result.fit_x = wl_fit
+
         return result
         
     def fit_all_spectra(self, wavelengths, data_matrix, timestamps, fit_params, max_workers=None, use_smart_init=True, progress_callback=None):
@@ -727,7 +738,7 @@ class FittingModels:
             
             # Perform fitting
             result = fitter.fit_spectrum(wavelengths, intensities, fit_params)
-            
+
             # Extract key results with additional calculated parameters
             fit_summary = {
                 'index': idx,
@@ -740,6 +751,7 @@ class FittingModels:
                 'bic': getattr(result, 'bic', None),
                 'parameters': {},
                 'peak_models': fit_params.get('peak_models', []),
+                'fit_x': result.fit_x,
                 'fitted_curve': result.best_fit,
                 'residuals': result.residual,
                 'components': result.eval_components() if hasattr(result, 'eval_components') else {},
@@ -1033,7 +1045,18 @@ class FittingEngine:
         
         successful_fits = sum(1 for r in results.values() if r and r.get('success', False))
         debug_print(f"Batch fitting complete: {successful_fits}/{len(results)} successful", "FITTING")
-        
+
+        failed = {idx: r for idx, r in results.items() if not (r and r.get('success', False))}
+        if failed:
+            debug_print(f"Failed fits ({len(failed)}):", "FITTING")
+            for idx, r in sorted(failed.items()):
+                if r is None:
+                    debug_print(f"  idx={idx}: result is None (future raised exception)", "FITTING")
+                elif 'error' in r:
+                    debug_print(f"  idx={idx} t={r.get('time', '?'):.3f}: exception: {r['error']}", "FITTING")
+                else:
+                    debug_print(f"  idx={idx} t={r.get('time', '?'):.3f}: lmfit success=False (redchi={r.get('reduced_chi_squared', '?')})", "FITTING")
+
         return self.fitting_results
     
     def get_fitting_result(self, time_idx):

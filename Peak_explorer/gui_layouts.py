@@ -1480,45 +1480,10 @@ class PLAnalysisApp:
             # Enable update parameters button (now just for manual re-update if needed)
             self.widgets['update_params_btn'].disabled = False
             
-            # Create full-range arrays for plotting (pad with NaN outside fit range)
-            if is_limited:
-                # Create arrays same size as original wavelengths
-                full_best_fit = np.full_like(wavelengths, np.nan)
-                full_residual = np.full_like(wavelengths, np.nan)
-                
-                # Fill in the fitted range
-                full_best_fit[mask] = result.best_fit
-                full_residual[mask] = result.residual
-                
-                debug_print(f"Created padded arrays: {np.sum(~np.isnan(full_best_fit))} non-NaN values", "APP")
-                
-                # Create a modified result object for plotting
-                class PlotResult:
-                    def __init__(self, original_result, best_fit, residual, wavelengths_full, mask):
-                        self.best_fit = best_fit
-                        self.residual = residual
-                        self.rsquared = original_result.rsquared
-                        self.success = original_result.success
-                        # Copy eval_components if it exists
-                        if hasattr(original_result, 'eval_components'):
-                            self._eval_components = {}
-                            components = original_result.eval_components()
-                            for comp_name, comp_values in components.items():
-                                full_comp = np.full_like(wavelengths_full, np.nan)
-                                full_comp[mask] = comp_values
-                                self._eval_components[comp_name] = full_comp
-                                debug_print(f"Component {comp_name}: {np.sum(~np.isnan(full_comp))} non-NaN values", "APP")
-                        else:
-                            self._eval_components = {}
-                    
-                    def eval_components(self):
-                        """Return component evaluations - THIS METHOD MUST BE AT CLASS LEVEL, NOT INSIDE __init__"""
-                        return self._eval_components
-                
-                plot_result = PlotResult(result, full_best_fit, full_residual, wavelengths, mask)
-            else:
-                plot_result = result
-                debug_print("Using full result (no padding needed)", "APP")
+            # The plotter uses result.fit_x as x-axis for all fit traces, so no
+            # padding is needed. For a limited wavelength range the fit was already
+            # run on the masked subset, so fit_x is already the correct shorter array.
+            debug_print(f"Fit x-axis: {len(result.fit_x)} points out of {len(wavelengths)} wavelengths", "APP")
             
             # Update spectrum plot with fit
             with self.widgets['spectrum_output']:
@@ -1531,7 +1496,7 @@ class PLAnalysisApp:
                 fig = self.plot_manager.create_spectrum_plot(
                     self.data_manager.wavelengths,
                     self.data_manager.get_current_spectrum(),
-                    fit_result=plot_result,
+                    fit_result=result,
                     wavelength_range=wl_range_display,
                     wavelength_unit=self.wavelength_unit,
                     name_map=peak_name_map
@@ -2120,17 +2085,14 @@ class PLAnalysisApp:
         if fit_result is None or not fit_result.get('success', False):
             return
 
-        # Wavelengths used during fitting
-        wavelengths = self.fitting_engine.fit_wavelengths
-        if wavelengths is None:
-            wavelengths = self.data_manager.wavelengths
-
-        # Raw intensities trimmed to fit wavelength range
+        # Raw intensities trimmed to the finite wavelengths used during fitting
+        fit_x = fit_result.get('fit_x')
+        full_wl = self.data_manager.wavelengths
         raw_intensities = self.data_manager.data_matrix[time_idx]
-        if len(wavelengths) != len(raw_intensities):
-            full_wl = self.data_manager.wavelengths
-            mask = (full_wl >= wavelengths.min()) & (full_wl <= wavelengths.max())
+        if fit_x is not None and len(fit_x) != len(raw_intensities):
+            mask = (full_wl >= fit_x.min()) & (full_wl <= fit_x.max())
             raw_intensities = raw_intensities[mask]
+        wavelengths = fit_x if fit_x is not None else full_wl
 
         # Update info label
         time_val = fit_result.get('time', 0)
