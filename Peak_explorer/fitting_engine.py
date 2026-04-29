@@ -535,7 +535,16 @@ class FittingModels:
                 peak_params[f'p{i}_skew'].set(value=peak_info.get('skew', 0.0), min=-10, max=10)
 
             params.update(peak_params)
-            
+
+            if peak_info.get('fix_center') and f'p{i}_center' in params:
+                params[f'p{i}_center'].set(vary=False)
+            if peak_info.get('fix_height') and f'p{i}_amplitude' in params:
+                params[f'p{i}_amplitude'].set(vary=False)
+            if peak_info.get('fix_sigma') and f'p{i}_sigma' in params:
+                params[f'p{i}_sigma'].set(vary=False)
+            if peak_info.get('fix_gamma') and f'p{i}_gamma' in params:
+                params[f'p{i}_gamma'].set(vary=False)
+
         return model, params
         
     def fit_spectrum(self, wavelengths, intensities, fit_params):

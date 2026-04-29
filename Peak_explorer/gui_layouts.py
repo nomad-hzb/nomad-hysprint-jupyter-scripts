@@ -2078,6 +2078,7 @@ class PLAnalysisApp:
 
     def _update_fit_vis_plot(self, slider_val):
         """Display the fit result for the given slider position"""
+        debug_print(f"Updating fit visualization for slider value: {slider_val}", "APP")
         if not self._fit_vis_indices or slider_val >= len(self._fit_vis_indices):
             return
 
@@ -2100,10 +2101,14 @@ class PLAnalysisApp:
         fit_x = fit_result.get('fit_x')
         full_wl = self.data_manager.wavelengths
         raw_intensities = self.data_manager.data_matrix[time_idx]
-        if fit_x is not None and len(fit_x) != len(raw_intensities):
+
+        # Ensure raw_intensities matches the wavelengths used for fitting
+        if fit_x is not None and len(fit_x) != len(full_wl):
             mask = (full_wl >= fit_x.min()) & (full_wl <= fit_x.max())
             raw_intensities = raw_intensities[mask]
-        wavelengths = fit_x if fit_x is not None else full_wl
+            wavelengths = fit_x
+        else:
+            wavelengths = full_wl
 
         show_components = self.widgets['fit_vis_show_components'].value
         components = fit_result.get('components', {})
