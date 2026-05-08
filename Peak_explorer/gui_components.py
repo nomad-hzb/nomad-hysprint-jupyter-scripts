@@ -352,9 +352,17 @@ class GUIComponents:
         """Create batch fitting widgets"""
         self.widgets['fit_sequential_checkbox'] = widgets.Checkbox(
             value=False,
-            description='Fit sequential (use previous result as start values)',
+            description='Fit sequential (slower — uses previous result as start values)',
             style={'description_width': 'initial'},
             layout=widgets.Layout(width='100%')
+        )
+
+        self.widgets['center_bound_input'] = widgets.FloatText(
+            value=config.DEFAULT_CENTER_BOUND,
+            description='Center bound:',
+            style={'description_width': 'initial'},
+            step=0.01,
+            layout=widgets.Layout(width='220px')
         )
 
         self.widgets['fit_all_btn'] = widgets.Button(

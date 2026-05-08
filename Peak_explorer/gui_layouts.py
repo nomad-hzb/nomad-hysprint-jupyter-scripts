@@ -252,6 +252,7 @@ class GUILayouts:
             widgets.HTML("<hr>"),
             widgets.HTML("<b>Peak Models:</b>"),
             self.widgets['add_peak_btn'],
+            self.widgets['center_bound_input'],
             self.widgets['peak_list_container']
         ]
         
@@ -885,6 +886,18 @@ class PLAnalysisApp:
         else:
             self.widgets['save_h5_btn'].layout.display = 'none'
 
+        # Set mode-dependent default center bound
+        h5_mode = self.data_manager.h5_mode or ''
+        if 'giwaxs' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['giwaxs']
+        elif 'absorbance' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['absorbance']
+        elif 'transmission' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['transmission']
+        else:
+            default_bound = config.CENTER_BOUND_DEFAULTS['default']
+        self.widgets['center_bound_input'].value = default_bound
+
         debug_print("UI updated after data load", "update_ui_after_data_load")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
@@ -1114,16 +1127,20 @@ class PLAnalysisApp:
             debug_print(f"Converting from {self.wavelength_unit}", "APP")
             
             if self.wavelength_unit == 'nm':
-                # Convert to eV
                 success = self.data_manager.convert_wavelength_to_energy()
                 if success:
                     self.wavelength_unit = 'eV'
                     self.widgets['energy_unit_display'].value = "E (eV)"
-                    
-                    # Update wavelength range slider
+
                     wl_min = float(self.data_manager.wavelengths.min())
                     wl_max = float(self.data_manager.wavelengths.max())
-                    
+                    mid = (wl_min + wl_max) / 2
+
+                    # Scale center bound: Δ(eV) ≈ mid_eV² · Δ(nm) / 1239.8
+                    self.widgets['center_bound_input'].value = round(
+                        mid ** 2 * self.widgets['center_bound_input'].value / 1239.8, 4
+                    )
+
                     # Expand range first, then set new limits
                     self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
                     self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
@@ -1137,16 +1154,20 @@ class PLAnalysisApp:
                         print(f"✅ Converted to energy (eV)")
                         print(f"   Range: {wl_min:.2f} - {wl_max:.2f} eV")
             elif self.wavelength_unit == 'eV':
-                # Convert to nm
                 success = self.data_manager.convert_energy_to_wavelength()
                 if success:
                     self.wavelength_unit = 'nm'
                     self.widgets['energy_unit_display'].value = "λ (nm)"
-                    
-                    # Update wavelength range slider
+
                     wl_min = float(self.data_manager.wavelengths.min())
                     wl_max = float(self.data_manager.wavelengths.max())
-                    
+                    mid = (wl_min + wl_max) / 2
+
+                    # Scale center bound: Δ(nm) ≈ mid_nm² · Δ(eV) / 1239.8
+                    self.widgets['center_bound_input'].value = round(
+                        mid ** 2 * self.widgets['center_bound_input'].value / 1239.8, 4
+                    )
+
                     # Expand range first, then set new limits
                     self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
                     self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
@@ -1262,6 +1283,7 @@ class PLAnalysisApp:
         params = {
             'background_model': 'None',
             'poly_degree': 2,
+            'center_bound': self.widgets['center_bound_input'].value,
             'peak_models': []
         }
         

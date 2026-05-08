@@ -398,7 +398,8 @@ class FittingModels:
         """
         model = None
         params = Parameters()
-        
+        center_bound = fit_params.get('center_bound', config.DEFAULT_CENTER_BOUND)
+
         # Add background model
         if fit_params['background_model'] != 'None':
             if fit_params['background_model'] == 'Polynomial':
@@ -447,8 +448,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
-                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
+                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
+                    max=peak_info.get('center_max', c + center_bound))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -476,8 +477,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
-                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
+                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
+                    max=peak_info.get('center_max', c + center_bound))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.pi))
                 peak_params[f'p{i}_sigma'].set(
@@ -488,8 +489,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
-                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
+                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
+                    max=peak_info.get('center_max', c + center_bound))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -504,8 +505,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
-                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
+                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
+                    max=peak_info.get('center_max', c + center_bound))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -520,8 +521,8 @@ class FittingModels:
                 c = peak_info['center']
                 peak_params[f'p{i}_center'].set(
                     value=c,
-                    min=peak_info.get('center_min', max(c - config.DEFAULT_CENTER_BOUND, 1e-6)),
-                    max=peak_info.get('center_max', c + config.DEFAULT_CENTER_BOUND))
+                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
+                    max=peak_info.get('center_max', c + center_bound))
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
                 peak_params[f'p{i}_sigma'].set(
@@ -891,7 +892,7 @@ class FittingEngine:
         debug_print(f"Detected {len(peaks)} peaks", "FITTING")
         return peaks
     
-    def create_fit_parameters(self, peak_models, background_model='Linear', poly_degree=2):
+    def create_fit_parameters(self, peak_models, background_model='Linear', poly_degree=2, center_bound=None, **kwargs):
         """
         Create fitting parameters dictionary
         
@@ -911,7 +912,8 @@ class FittingEngine:
         self.fit_params = {
             'peak_models': peak_models,
             'background_model': background_model,
-            'poly_degree': poly_degree
+            'poly_degree': poly_degree,
+            'center_bound': center_bound,
         }
         
         debug_print(f"Created fit parameters: {len(peak_models)} peaks, bg={background_model}", "FITTING")

@@ -50,9 +50,17 @@ PEAK_DETECTION_DEFAULTS = {
 DEFAULT_BACKGROUND_MODEL = 'Linear'
 DEFAULT_PEAK_MODEL = 'Gaussian'
 
-# Default half-width of the center parameter search window (nm).
+# Default half-width of the center parameter search window (in the current x-axis unit).
 # Increase if peaks shift by more than this between the initial guess and the fit.
-DEFAULT_CENTER_BOUND = 300
+DEFAULT_CENTER_BOUND = 50
+
+# Mode-specific center bound defaults (applied when loading H5 data)
+CENTER_BOUND_DEFAULTS = {
+    'giwaxs': 0.25,
+    'absorbance': 300,
+    'transmission': 300,
+    'default': 50,
+}
 
 # Background handling
 BACKGROUND_OPTIONS = ['None', 'Manual', 'Linear', 'Polynomial', 'Exponential', 'Custom']
