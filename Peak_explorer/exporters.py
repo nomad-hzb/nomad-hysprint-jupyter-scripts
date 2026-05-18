@@ -163,6 +163,7 @@ class ResultExporter:
         """Create comprehensive peak parameters dataframe and separate stderr dataframe"""
         param_data = []
         stderr_data = []
+        renamed_to_area = set()  # peak_ids whose amplitude column was renamed to area
 
         # debug_print("Fitting_results: " + str(fitting_results), "Exporter")
         
@@ -235,40 +236,26 @@ class ResultExporter:
                                 stderr_row[f'{col_name}_stderr'] = params[stderr_key]
 
                     # Calculate derived parameters
-                    # todo add other peak_type; refine if condition; some calculations are valid for all types
-                    if peak_type == "Gaussian":
-                    # if 'amplitude' in params and 'sigma' in params:
+                    # todo for Edgar: Check if all the calculations make sense. Quite happy with the current verion (18.05.2026)
+
+                    # Rename amplitude -> area for peak types where lmfit's `amplitude`
+                    # is the integrated area under the curve.
+                    if peak_type in ("Gaussian", "Voigt", "Lorentzian", "Skewed Gaussian", "Skewed Voigt"):
                         amplitude = params['amplitude']
-                        sigma = params['sigma']
                         amplitude_stderr = params.get('amplitude_stderr')
                         amplitude_stderr = np.nan if amplitude_stderr is None else amplitude_stderr
-                        sigma_stderr = params.get('sigma_stderr')
-                        sigma_stderr = np.nan if sigma_stderr is None else sigma_stderr
-
-                        # Calculate height from amplitude (for Gaussian)
-                        height = amplitude / (sigma * np.sqrt(2 * np.pi))
-                        row[f'{peak_id}_height'] = height
-                        # Gaußsche Fehlerfortpflanzungsgesetz.
-                        # todo check with Edgar if this is correct
-                        stderr_row[f'{peak_id}_height_stderr'] = height * np.sqrt(
-                            (amplitude_stderr / amplitude) ** 2 + (sigma_stderr / sigma) ** 2
-                        ) if amplitude and sigma else np.nan
-
-                        # Calculate area under curve (integral of Gaussian)
                         row[f'{peak_id}_area'] = amplitude
                         stderr_row[f'{peak_id}_area_stderr'] = amplitude_stderr
+                        renamed_to_area.add(peak_id)
 
-                        # Calculate FWHM (Full Width at Half Maximum)
-                        # fwhm = 2.355 * sigma
-                        # fwhm_stderr = 2.355 * sigma_stderr
-                        # row[f'{peak_id}_FWHM'] = fwhm
-                        # stderr_row[f'{peak_id}_FWHM_stderr'] = fwhm_stderr
+                    if peak_type == "Gaussian":
+                        sigma = params['sigma']
+                        sigma_stderr = params.get('sigma_stderr')
+                        sigma_stderr = np.nan if sigma_stderr is None else sigma_stderr
 
                         # Calculate peak width at different heights
                         row[f'{peak_id}_width_10pct'] = 4.29 * sigma
                         stderr_row[f'{peak_id}_width_10pct_stderr'] = 4.29 * sigma_stderr
-                        # row[f'{peak_id}_width_50pct'] = 2.355 * sigma
-                        # stderr_row[f'{peak_id}_width_50pct_stderr'] = 2.355 * sigma_stderr
                 
                 # Add R_squared as the last column
                 row['R_Squared'] = result.get('r_squared', np.nan)
@@ -279,10 +266,12 @@ class ResultExporter:
                 
         main_df = pd.DataFrame(param_data).sort_values('Time_Index').reset_index(drop=True)
         stderr_df = pd.DataFrame(stderr_data).sort_values('Time_Index').reset_index(drop=True)
-        main_df_amplitude_cols = [col for col in main_df.columns if '_amplitude' in col]
-        main_df = main_df.drop(columns=main_df_amplitude_cols)
-        stderr_df_amplitude_cols = [col for col in stderr_df.columns if '_amplitude_stderr' in col]
-        stderr_df = stderr_df.drop(columns=stderr_df_amplitude_cols, errors='ignore')
+        # Only drop amplitude columns for peaks where we renamed amplitude -> area;
+        # peak types without that rename keep their amplitude column.
+        amplitude_cols = [f'{pid}_amplitude' for pid in renamed_to_area]
+        amplitude_stderr_cols = [f'{pid}_amplitude_stderr' for pid in renamed_to_area]
+        main_df = main_df.drop(columns=amplitude_cols, errors='ignore')
+        stderr_df = stderr_df.drop(columns=amplitude_stderr_cols, errors='ignore')
         
         return main_df, stderr_df
         
