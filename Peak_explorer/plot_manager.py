@@ -528,7 +528,7 @@ class PlotManager:
             name_map = {}
 
         # Determine y-axis unit from column suffix
-        if column_suffix in ('center', 'fwhm'):
+        if column_suffix in ('center', 'fwhm', 'sigma'):
             y_unit = wavelength_unit
         else:
             y_unit = '-'
@@ -566,7 +566,7 @@ class PlotManager:
         else:
             title_suffix = column_suffix
 
-        if title_suffix == "center" or title_suffix == "fwhm":
+        if title_suffix in ("center", "fwhm", "sigma"):
             y_axis_title = f"{title_suffix} ({wavelength_unit})"
         else:
             y_axis_title = title_suffix + " (-)"
@@ -651,8 +651,14 @@ class PlotManager:
                                                        wavelength_unit=wavelength_unit, time_unit=time_unit,
                                                        name_map=name_map)
         figures.append(fig_heights)
-        
-        # Plot 5: R-squared vs time
+
+        # Plot 5: Peak sigma vs time
+        fig_sigma = self.create_single_plotly_figure(peak_ids, df, column_suffix='sigma',
+                                                     wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                     name_map=name_map)
+        figures.append(fig_sigma)
+
+        # Plot 6: R-squared vs time
         if 'r_squared' in df.columns:
             fig_quality = go.Figure()
             

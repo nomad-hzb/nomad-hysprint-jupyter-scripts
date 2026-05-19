@@ -596,23 +596,21 @@ class GUIComponents:
             min_height='100px'  # Fixed height to prevent jumping
         ))
 
-        # Bounds containers (one set for basic, one for gamma types)
+        # Bounds container — single set of widget instances; the Min/Max HBox
+        # children are swapped between basic and gamma column sets when the peak
+        # type changes. (Placing the same widget in two persistent parents causes
+        # view-rendering issues in ipywidgets and silently drops user input.)
         def _lbl(text):
             return widgets.Label(text, layout=widgets.Layout(width='35px'))
 
-        bounds_area_basic = widgets.VBox([
-            widgets.HBox([_lbl('Min:'), center_min, height_min, sigma_min]),
-            widgets.HBox([_lbl('Max:'), center_max, height_max, sigma_max]),
-        ])
-        bounds_area_gamma = widgets.VBox([
-            widgets.HBox([_lbl('Min:'), center_min, height_min, sigma_min, gamma_min]),
-            widgets.HBox([_lbl('Max:'), center_max, height_max, sigma_max, gamma_max]),
-        ])
-        bounds_area_gamma.layout.display = 'none'
-        bounds_area_gamma.layout.visibility = 'hidden'
+        min_label = _lbl('Min:')
+        max_label = _lbl('Max:')
+
+        bounds_min_row = widgets.HBox([min_label, center_min, height_min, sigma_min])
+        bounds_max_row = widgets.HBox([max_label, center_max, height_max, sigma_max])
 
         bounds_container = widgets.VBox(
-            [bounds_area_basic, bounds_area_gamma],
+            [bounds_min_row, bounds_max_row],
             layout=widgets.Layout(
                 display='none',
                 visibility='hidden',
@@ -620,6 +618,14 @@ class GUIComponents:
                 border_top='1px dashed #aaa'
             )
         )
+
+        def _set_bounds_layout(is_gamma):
+            if is_gamma:
+                bounds_min_row.children = (min_label, center_min, height_min, sigma_min, gamma_min)
+                bounds_max_row.children = (max_label, center_max, height_max, sigma_max, gamma_max)
+            else:
+                bounds_min_row.children = (min_label, center_min, height_min, sigma_min)
+                bounds_max_row.children = (max_label, center_max, height_max, sigma_max)
 
         # Callback to switch between parameter sets
         def on_peak_type_change(change):
@@ -650,18 +656,9 @@ class GUIComponents:
                 peak_params_basic.layout.visibility = 'visible'
                 peak_params_basic.layout.display = 'flex'
 
-            # Switch bounds area to match type
+            # Switch bounds row columns to match type
             is_gamma = peak_type_val in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']
-            if is_gamma:
-                bounds_area_basic.layout.display = 'none'
-                bounds_area_basic.layout.visibility = 'hidden'
-                bounds_area_gamma.layout.display = 'flex'
-                bounds_area_gamma.layout.visibility = 'visible'
-            else:
-                bounds_area_gamma.layout.display = 'none'
-                bounds_area_gamma.layout.visibility = 'hidden'
-                bounds_area_basic.layout.display = 'flex'
-                bounds_area_basic.layout.visibility = 'visible'
+            _set_bounds_layout(is_gamma)
 
         def on_bounds_toggle(change):
             if change['new']:

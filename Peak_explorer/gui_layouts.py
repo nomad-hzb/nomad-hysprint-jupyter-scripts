@@ -1324,10 +1324,12 @@ class PLAnalysisApp:
                 if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
                     peak_params['fix_gamma'] = peak_model._widgets['fix_gamma'].value
 
-                # Add bounds (empty string = use default)
+                # Add bounds (empty string = use default).
+                # Accept both "." and "," as decimal separators so users in
+                # comma-decimal locales don't silently lose their bound.
                 def _parse_bound(val):
                     try:
-                        return float(val.strip())
+                        return float(val.strip().replace(',', '.'))
                     except (ValueError, AttributeError):
                         return None
 

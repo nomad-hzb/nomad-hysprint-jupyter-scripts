@@ -444,18 +444,30 @@ class FittingModels:
                     kw['max'] = peak_info['height_max'] * s * factor
                 return kw
 
+            def _bounds(key_min, key_max, default_min, default_max, floor=1e-9):
+                """Resolve (min, max) honoring user-provided bounds. If only one
+                side is provided and the auto-default for the other side would
+                invalidate it (e.g. auto min > user max), relax the auto side
+                down to `floor` / up to +inf so the user's bound is preserved."""
+                umin = peak_info.get(key_min)
+                umax = peak_info.get(key_max)
+                lo = umin if umin is not None else default_min
+                hi = umax if umax is not None else default_max
+                if umax is not None and umin is None and lo >= hi:
+                    lo = floor
+                if umin is not None and umax is None and hi <= lo:
+                    hi = float('inf')
+                return lo, hi
+
             if peak_info['type'] == 'Gaussian':
                 c = peak_info['center']
-                peak_params[f'p{i}_center'].set(
-                    value=c,
-                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
-                    max=peak_info.get('center_max', c + center_bound))
+                c_lo, c_hi = _bounds('center_min', 'center_max',
+                                     max(c - center_bound, 1e-6), c + center_bound, floor=1e-6)
+                peak_params[f'p{i}_center'].set(value=c, min=c_lo, max=c_hi)
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
-                peak_params[f'p{i}_sigma'].set(
-                    value=peak_info['sigma'],
-                    min=peak_info.get('sigma_min', 0.00001),
-                    max=peak_info.get('sigma_max', 100))
+                s_lo, s_hi = _bounds('sigma_min', 'sigma_max', 0.00001, 100, floor=1e-9)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=s_lo, max=s_hi)
             elif peak_info['type'] == 'Polynomial':
                 # Polynomial - use fitted coefficients if available
                 degree = peak_info.get('poly_degree', 2)
@@ -475,65 +487,71 @@ class FittingModels:
                 peak_params[f'p{i}_intercept'].set(value=0.0)
             elif peak_info['type'] == 'Lorentzian':
                 c = peak_info['center']
-                peak_params[f'p{i}_center'].set(
-                    value=c,
-                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
-                    max=peak_info.get('center_max', c + center_bound))
+                c_lo, c_hi = _bounds('center_min', 'center_max',
+                                     max(c - center_bound, 1e-6), c + center_bound, floor=1e-6)
+                peak_params[f'p{i}_center'].set(value=c, min=c_lo, max=c_hi)
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.pi))
-                peak_params[f'p{i}_sigma'].set(
-                    value=peak_info['sigma'],
-                    min=peak_info.get('sigma_min', 0.00001),
-                    max=peak_info.get('sigma_max', 100))
+                s_lo, s_hi = _bounds('sigma_min', 'sigma_max', 0.00001, 100, floor=1e-9)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=s_lo, max=s_hi)
             elif peak_info['type'] == 'Voigt':
                 c = peak_info['center']
-                peak_params[f'p{i}_center'].set(
-                    value=c,
-                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
-                    max=peak_info.get('center_max', c + center_bound))
+                c_lo, c_hi = _bounds('center_min', 'center_max',
+                                     max(c - center_bound, 1e-6), c + center_bound, floor=1e-6)
+                peak_params[f'p{i}_center'].set(value=c, min=c_lo, max=c_hi)
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
-                peak_params[f'p{i}_sigma'].set(
-                    value=peak_info['sigma'],
-                    min=peak_info.get('sigma_min', 0.001),
-                    max=peak_info.get('sigma_max', 100))
-                peak_params[f'p{i}_gamma'].set(
-                    value=peak_info['gamma'],
-                    min=peak_info.get('gamma_min', 0.001),
-                    max=peak_info.get('gamma_max', 100))
+                s_lo, s_hi = _bounds('sigma_min', 'sigma_max', 0.001, 100, floor=1e-9)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=s_lo, max=s_hi)
+                g_lo, g_hi = _bounds('gamma_min', 'gamma_max', 0.001, 100, floor=1e-9)
+                peak_params[f'p{i}_gamma'].set(value=peak_info['gamma'], min=g_lo, max=g_hi)
             elif peak_info['type'] == 'Skewed Gaussian':
                 c = peak_info['center']
-                peak_params[f'p{i}_center'].set(
-                    value=c,
-                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
-                    max=peak_info.get('center_max', c + center_bound))
+                c_lo, c_hi = _bounds('center_min', 'center_max',
+                                     max(c - center_bound, 1e-6), c + center_bound, floor=1e-6)
+                peak_params[f'p{i}_center'].set(value=c, min=c_lo, max=c_hi)
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
-                peak_params[f'p{i}_sigma'].set(
-                    value=peak_info['sigma'],
-                    min=peak_info.get('sigma_min', 0.001),
-                    max=peak_info.get('sigma_max', 100))
-                peak_params[f'p{i}_gamma'].set(
-                    value=peak_info.get('gamma', 0.0),
-                    min=peak_info.get('gamma_min', -10),
-                    max=peak_info.get('gamma_max', 10))
+                s_lo, s_hi = _bounds('sigma_min', 'sigma_max', 0.001, 100, floor=1e-9)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=s_lo, max=s_hi)
+                g_lo, g_hi = _bounds('gamma_min', 'gamma_max', -10, 10, floor=-float('inf'))
+                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=g_lo, max=g_hi)
             elif peak_info['type'] == 'Skewed Voigt':
                 c = peak_info['center']
-                peak_params[f'p{i}_center'].set(
-                    value=c,
-                    min=peak_info.get('center_min', max(c - center_bound, 1e-6)),
-                    max=peak_info.get('center_max', c + center_bound))
+                c_lo, c_hi = _bounds('center_min', 'center_max',
+                                     max(c - center_bound, 1e-6), c + center_bound, floor=1e-6)
+                peak_params[f'p{i}_center'].set(value=c, min=c_lo, max=c_hi)
                 peak_params[f'p{i}_amplitude'].set(
                     **_amp_kwargs(peak_info['height'], peak_info['sigma'], np.sqrt(2 * np.pi)))
-                peak_params[f'p{i}_sigma'].set(
-                    value=peak_info['sigma'],
-                    min=peak_info.get('sigma_min', 0.001),
-                    max=peak_info.get('sigma_max', 100))
-                peak_params[f'p{i}_gamma'].set(
-                    value=peak_info.get('gamma', 0.0),
-                    min=peak_info.get('gamma_min', -10),
-                    max=peak_info.get('gamma_max', 10))
+                s_lo, s_hi = _bounds('sigma_min', 'sigma_max', 0.001, 100, floor=1e-9)
+                peak_params[f'p{i}_sigma'].set(value=peak_info['sigma'], min=s_lo, max=s_hi)
+                g_lo, g_hi = _bounds('gamma_min', 'gamma_max', -10, 10, floor=-float('inf'))
+                peak_params[f'p{i}_gamma'].set(value=peak_info.get('gamma', 0.0), min=g_lo, max=g_hi)
                 peak_params[f'p{i}_skew'].set(value=peak_info.get('skew', 0.0), min=-10, max=10)
+
+            # Log resolved bounds per parameter, marking USER vs AUTO defaults
+            _bound_keymap = {
+                'center':    ('center_min', 'center_max'),
+                'sigma':     ('sigma_min', 'sigma_max'),
+                'gamma':     ('gamma_min', 'gamma_max'),
+                'amplitude': ('height_min', 'height_max'),
+            }
+            _log_parts = []
+            for _pname, (_kmin, _kmax) in _bound_keymap.items():
+                _pkey = f'p{i}_{_pname}'
+                if _pkey not in peak_params:
+                    continue
+                _p = peak_params[_pkey]
+                _umin = '(USER)' if peak_info.get(_kmin) is not None else ''
+                _umax = '(USER)' if peak_info.get(_kmax) is not None else ''
+                _log_parts.append(
+                    f"{_pname}={_p.value:.4g} ∈ [{_p.min:.4g}{_umin}, {_p.max:.4g}{_umax}]"
+                )
+            if _log_parts:
+                debug_print(
+                    f"p{i} ({peak_info['type']}) " + "  ".join(_log_parts),
+                    "FITTING"
+                )
 
             params.update(peak_params)
 
