@@ -96,6 +96,7 @@ H5_MODES = {
     'pl_raw': 'PL raw',
     'pl_binned': 'PL binned & bgs',
     'giwaxs': 'GIWAXS',
+    'giwaxs_diamond': 'GIWAXS Diamond integration',
     'transmission_raw': 'Transmission raw',
     'transmission_binned': 'Transmission binned & bgs',
     'absorbance_raw': 'Absorbance raw',
@@ -118,6 +119,11 @@ H5_PATHS = {
         'timestamps': '/beamline_logging/Time',
         'data': '/diffractogram/i_values',
         'wavelengths': '/diffractogram/q_values'
+    },
+    'giwaxs_diamond': {
+        'timestamps': '/beamline_logging/Time',
+        'data': '/diffractogram/i_values_diamond',
+        'wavelengths': '/diffractogram/q_values_diamond'
     },
     'transmission_raw': {
         'timestamps': '/raw_optical_measurements/raw_transmission_measurements/raw_transmission_Time',

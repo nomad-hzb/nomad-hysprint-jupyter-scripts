@@ -496,7 +496,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned', 'absorbance_raw', 'absorbance_binned')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'giwaxs_diamond', 'transmission_raw', 'transmission_binned', 'absorbance_raw', 'absorbance_binned')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -540,6 +540,18 @@ class H5DataLoader:
                 if isinstance(time_unit, bytes):
                     time_unit = time_unit.decode()
                 debug_print(f"GIWAXS time unit read from attribute: {time_unit}", "H5")
+
+            elif mode == "giwaxs_diamond":
+                ts_dataset = f[config.H5_PATHS['giwaxs_diamond']['timestamps']]
+                timestamps = ts_dataset[()]
+                data_matrix = f[config.H5_PATHS['giwaxs_diamond']['data']][()]
+                y_values = f[config.H5_PATHS['giwaxs_diamond']['wavelengths']][()][0]
+                unit = "1/Å"
+                # Read time unit from dataset attribute; fall back to 's'
+                time_unit = ts_dataset.attrs.get('units', ts_dataset.attrs.get('unit', 's'))
+                if isinstance(time_unit, bytes):
+                    time_unit = time_unit.decode()
+                debug_print(f"GIWAXS Diamond time unit read from attribute: {time_unit}", "H5")
 
             elif mode == "transmission_raw":
                 timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
