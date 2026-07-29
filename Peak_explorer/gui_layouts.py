@@ -252,6 +252,7 @@ class GUILayouts:
             widgets.HTML("<hr>"),
             widgets.HTML("<b>Peak Models:</b>"),
             self.widgets['add_peak_btn'],
+            self.widgets['center_bound_input'],
             self.widgets['peak_list_container']
         ]
         
@@ -273,6 +274,7 @@ class GUILayouts:
                 self.widgets['fit_end_idx']
             ]),
             widgets.HTML("<b>Batch Actions:</b>"),
+            self.widgets['fit_sequential_checkbox'],
             widgets.HBox([
                 self.widgets['fit_all_btn'],
                 self.widgets['fit_all_range_btn']
@@ -884,6 +886,18 @@ class PLAnalysisApp:
         else:
             self.widgets['save_h5_btn'].layout.display = 'none'
 
+        # Set mode-dependent default center bound
+        h5_mode = self.data_manager.h5_mode or ''
+        if 'giwaxs' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['giwaxs']
+        elif 'absorbance' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['absorbance']
+        elif 'transmission' in h5_mode:
+            default_bound = config.CENTER_BOUND_DEFAULTS['transmission']
+        else:
+            default_bound = config.CENTER_BOUND_DEFAULTS['default']
+        self.widgets['center_bound_input'].value = default_bound
+
         debug_print("UI updated after data load", "update_ui_after_data_load")
 
     def _update_wavelength_range_on_spectrum(self, wavelength_range):
@@ -1113,16 +1127,20 @@ class PLAnalysisApp:
             debug_print(f"Converting from {self.wavelength_unit}", "APP")
             
             if self.wavelength_unit == 'nm':
-                # Convert to eV
                 success = self.data_manager.convert_wavelength_to_energy()
                 if success:
                     self.wavelength_unit = 'eV'
                     self.widgets['energy_unit_display'].value = "E (eV)"
-                    
-                    # Update wavelength range slider
+
                     wl_min = float(self.data_manager.wavelengths.min())
                     wl_max = float(self.data_manager.wavelengths.max())
-                    
+                    mid = (wl_min + wl_max) / 2
+
+                    # Scale center bound: Δ(eV) ≈ mid_eV² · Δ(nm) / 1239.8
+                    self.widgets['center_bound_input'].value = round(
+                        mid ** 2 * self.widgets['center_bound_input'].value / 1239.8, 4
+                    )
+
                     # Expand range first, then set new limits
                     self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
                     self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
@@ -1136,16 +1154,20 @@ class PLAnalysisApp:
                         print(f"✅ Converted to energy (eV)")
                         print(f"   Range: {wl_min:.2f} - {wl_max:.2f} eV")
             elif self.wavelength_unit == 'eV':
-                # Convert to nm
                 success = self.data_manager.convert_energy_to_wavelength()
                 if success:
                     self.wavelength_unit = 'nm'
                     self.widgets['energy_unit_display'].value = "λ (nm)"
-                    
-                    # Update wavelength range slider
+
                     wl_min = float(self.data_manager.wavelengths.min())
                     wl_max = float(self.data_manager.wavelengths.max())
-                    
+                    mid = (wl_min + wl_max) / 2
+
+                    # Scale center bound: Δ(nm) ≈ mid_nm² · Δ(eV) / 1239.8
+                    self.widgets['center_bound_input'].value = round(
+                        mid ** 2 * self.widgets['center_bound_input'].value / 1239.8, 4
+                    )
+
                     # Expand range first, then set new limits
                     self.widgets['wavelength_range_slider'].min = min(wl_min, self.widgets['wavelength_range_slider'].min)
                     self.widgets['wavelength_range_slider'].max = max(wl_max, self.widgets['wavelength_range_slider'].max)
@@ -1261,6 +1283,7 @@ class PLAnalysisApp:
         params = {
             'background_model': 'None',
             'poly_degree': 2,
+            'center_bound': self.widgets['center_bound_input'].value,
             'peak_models': []
         }
         
@@ -1301,10 +1324,12 @@ class PLAnalysisApp:
                 if model_type in ['Voigt', 'Skewed Gaussian', 'Skewed Voigt']:
                     peak_params['fix_gamma'] = peak_model._widgets['fix_gamma'].value
 
-                # Add bounds (empty string = use default)
+                # Add bounds (empty string = use default).
+                # Accept both "." and "," as decimal separators so users in
+                # comma-decimal locales don't silently lose their bound.
                 def _parse_bound(val):
                     try:
-                        return float(val.strip())
+                        return float(val.strip().replace(',', '.'))
                     except (ValueError, AttributeError):
                         return None
 
@@ -1480,45 +1505,10 @@ class PLAnalysisApp:
             # Enable update parameters button (now just for manual re-update if needed)
             self.widgets['update_params_btn'].disabled = False
             
-            # Create full-range arrays for plotting (pad with NaN outside fit range)
-            if is_limited:
-                # Create arrays same size as original wavelengths
-                full_best_fit = np.full_like(wavelengths, np.nan)
-                full_residual = np.full_like(wavelengths, np.nan)
-                
-                # Fill in the fitted range
-                full_best_fit[mask] = result.best_fit
-                full_residual[mask] = result.residual
-                
-                debug_print(f"Created padded arrays: {np.sum(~np.isnan(full_best_fit))} non-NaN values", "APP")
-                
-                # Create a modified result object for plotting
-                class PlotResult:
-                    def __init__(self, original_result, best_fit, residual, wavelengths_full, mask):
-                        self.best_fit = best_fit
-                        self.residual = residual
-                        self.rsquared = original_result.rsquared
-                        self.success = original_result.success
-                        # Copy eval_components if it exists
-                        if hasattr(original_result, 'eval_components'):
-                            self._eval_components = {}
-                            components = original_result.eval_components()
-                            for comp_name, comp_values in components.items():
-                                full_comp = np.full_like(wavelengths_full, np.nan)
-                                full_comp[mask] = comp_values
-                                self._eval_components[comp_name] = full_comp
-                                debug_print(f"Component {comp_name}: {np.sum(~np.isnan(full_comp))} non-NaN values", "APP")
-                        else:
-                            self._eval_components = {}
-                    
-                    def eval_components(self):
-                        """Return component evaluations - THIS METHOD MUST BE AT CLASS LEVEL, NOT INSIDE __init__"""
-                        return self._eval_components
-                
-                plot_result = PlotResult(result, full_best_fit, full_residual, wavelengths, mask)
-            else:
-                plot_result = result
-                debug_print("Using full result (no padding needed)", "APP")
+            # The plotter uses result.fit_x as x-axis for all fit traces, so no
+            # padding is needed. For a limited wavelength range the fit was already
+            # run on the masked subset, so fit_x is already the correct shorter array.
+            debug_print(f"Fit x-axis: {len(result.fit_x)} points out of {len(wavelengths)} wavelengths", "APP")
             
             # Update spectrum plot with fit
             with self.widgets['spectrum_output']:
@@ -1531,7 +1521,7 @@ class PLAnalysisApp:
                 fig = self.plot_manager.create_spectrum_plot(
                     self.data_manager.wavelengths,
                     self.data_manager.get_current_spectrum(),
-                    fit_result=plot_result,
+                    fit_result=result,
                     wavelength_range=wl_range_display,
                     wavelength_unit=self.wavelength_unit,
                     name_map=peak_name_map
@@ -1722,10 +1712,12 @@ class PLAnalysisApp:
                 debug_print("Batch fitting full wavelength range", "APP")
             
             # Perform batch fitting
+            fit_sequential = self.widgets['fit_sequential_checkbox'].value
             results = self.fitting_engine.fit_all_spectra(
                 wavelengths_fit,
                 data_matrix_fit,
-                self.data_manager.timestamps
+                self.data_manager.timestamps,
+                use_smart_init=fit_sequential
             )
             
             # Count successful fits
@@ -1814,11 +1806,13 @@ class PLAnalysisApp:
                 debug_print("Range fitting full wavelength range", "APP")
             
             # Perform batch fitting on range with progress callback
+            fit_sequential = self.widgets['fit_sequential_checkbox'].value
             results = self.fitting_engine.fit_all_spectra(
                 wavelengths_fit,
                 data_matrix_fit,
                 self.data_manager.timestamps,
-                fit_range=(start_idx, end_idx)
+                fit_range=(start_idx, end_idx),
+                use_smart_init=fit_sequential
             )
             
             # Count successful fits
@@ -2023,10 +2017,17 @@ class PLAnalysisApp:
 
         # Check if heatmap already exists
         if self.plot_manager.heatmap_fig is None or update_heatmap:
+            # Flip colorscale for absorbance modes (only when H5 data is loaded)
+            mode = self.data_manager.h5_mode
+            if mode is not None and mode in ('absorbance_raw', 'absorbance_binned'):
+                self.plot_manager.visualization.colorscale = config.DEFAULT_COLORSCALE + '_r'
+            else:
+                self.plot_manager.visualization.colorscale = config.DEFAULT_COLORSCALE
+
             # Create heatmap for the first time
             with self.widgets['heatmap_output']:
                 self.widgets['heatmap_output'].clear_output()
-                
+
                 fig = self.plot_manager.create_heatmap(
                     self.data_manager.data_matrix,
                     self.data_manager.wavelengths,
@@ -2081,10 +2082,7 @@ class PLAnalysisApp:
         if not self.fitting_engine.has_fitting_results():
             return
 
-        self._fit_vis_indices = sorted([
-            idx for idx, r in self.fitting_engine.fitting_results.items()
-            if r and r.get('success', False)
-        ])
+        self._fit_vis_indices = sorted(self.fitting_engine.fitting_results.keys())
 
         if not self._fit_vis_indices:
             return
@@ -2104,40 +2102,45 @@ class PLAnalysisApp:
 
     def _update_fit_vis_plot(self, slider_val):
         """Display the fit result for the given slider position"""
+        debug_print(f"Updating fit visualization for slider value: {slider_val}", "APP")
         if not self._fit_vis_indices or slider_val >= len(self._fit_vis_indices):
             return
 
         time_idx = self._fit_vis_indices[slider_val]
         fit_result = self.fitting_engine.fitting_results.get(time_idx)
 
-        if fit_result is None or not fit_result.get('success', False):
+        if fit_result is None:
             return
 
-        # Wavelengths used during fitting
-        wavelengths = self.fitting_engine.fit_wavelengths
-        if wavelengths is None:
-            wavelengths = self.data_manager.wavelengths
-
-        # Raw intensities trimmed to fit wavelength range
-        raw_intensities = self.data_manager.data_matrix[time_idx]
-        if len(wavelengths) != len(raw_intensities):
-            full_wl = self.data_manager.wavelengths
-            mask = (full_wl >= wavelengths.min()) & (full_wl <= wavelengths.max())
-            raw_intensities = raw_intensities[mask]
-
-        # Update info label
+        success = fit_result.get('success', False)
         time_val = fit_result.get('time', 0)
         r2 = fit_result.get('r_squared', float('nan'))
+        status = "" if success else "  |  FIT FAILED"
         self.widgets['fit_vis_label'].value = (
-            f"Index: {time_idx}  |  Time: {time_val:.3f} {self.data_manager.time_unit}  |  R²: {r2:.4f}"
+            f"Index: {time_idx}  |  Time: {time_val:.3f} {self.data_manager.time_unit}"
+            f"  |  R²: {r2:.4f}{status}"
         )
+
+        # Raw intensities trimmed to the finite wavelengths used during fitting
+        fit_x = fit_result.get('fit_x')
+        full_wl = self.data_manager.wavelengths
+        raw_intensities = self.data_manager.data_matrix[time_idx]
+
+        # Ensure raw_intensities matches the wavelengths used for fitting
+        if fit_x is not None and len(fit_x) != len(full_wl):
+            mask = (full_wl >= fit_x.min()) & (full_wl <= fit_x.max())
+            raw_intensities = raw_intensities[mask]
+            wavelengths = fit_x
+        else:
+            wavelengths = full_wl
 
         show_components = self.widgets['fit_vis_show_components'].value
         components = fit_result.get('components', {})
-        debug_print(f"FitVis: show_components={show_components}, stored components={list(components.keys())}", "APP")
+        debug_print(f"FitVis: success={success}, show_components={show_components}, stored components={list(components.keys())}", "APP")
 
+        # Pass None fit_result for failed frames so the plotter only draws raw data
         fig = self.plot_manager.create_fit_vis_plot(
-            fit_result, wavelengths, raw_intensities,
+            fit_result if success else None, wavelengths, raw_intensities,
             wavelength_unit=self.wavelength_unit or 'nm',
             time_unit=self.data_manager.time_unit,
             show_components=show_components

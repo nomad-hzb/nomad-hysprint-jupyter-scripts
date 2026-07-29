@@ -162,24 +162,26 @@ class Plotter:
                     hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Background: %{{y:.0f}}<extra></extra>"
                 ))
             
+            # Use fit_x if available (finite-only wavelengths), else fall back to full wavelengths
+            fit_x = getattr(fit_result, 'fit_x', wavelengths)
+
             # Fitted curve
             fig.add_trace(go.Scatter(
-                x=wavelengths,
+                x=fit_x,
                 y=fit_result.best_fit,
                 mode='lines',
                 name='Fitted Curve',
                 line=dict(color='red', width=3, dash='dash'),
                 hovertemplate=f"Wavelength: %{{x:.3f}} {wavelength_unit}<br>Fitted: %{{y:.0f}}<extra></extra>"
             ), row=1, col=1)
-            
-            # Individual components if available
+
             # Individual components if available
             if hasattr(fit_result, 'eval_components'):
                 debug_print("✓ fit_result has eval_components method", "PLOT")
                 components = fit_result.eval_components()
                 debug_print(f"✓ eval_components returned {len(components)} components", "PLOT")
                 debug_print(f"  Component names: {list(components.keys())}", "PLOT")
-                
+
                 color_idx = 0
                 for comp_name, comp_values in components.items():
                     debug_print(f"  Processing component: {comp_name}, has {np.sum(~np.isnan(comp_values))} non-NaN values", "PLOT")
@@ -194,7 +196,7 @@ class Plotter:
                         else:
                             label = comp_name.replace('_', ' ').title()
                         fig.add_trace(go.Scatter(
-                            x=wavelengths,
+                            x=fit_x,
                             y=comp_values,
                             mode='lines',
                             name=label,
@@ -210,10 +212,10 @@ class Plotter:
                         debug_print(f"  ✗ Skipping 'best_fit' component", "PLOT")
             else:
                 debug_print("✗ fit_result does NOT have eval_components method", "PLOT")
-                    
+
             # Residuals
             fig.add_trace(go.Scatter(
-                x=wavelengths,
+                x=fit_x,
                 y=fit_result.residual,
                 mode='lines',
                 name='Residuals',
@@ -526,7 +528,7 @@ class PlotManager:
             name_map = {}
 
         # Determine y-axis unit from column suffix
-        if column_suffix in ('center', 'fwhm'):
+        if column_suffix in ('center', 'fwhm', 'sigma'):
             y_unit = wavelength_unit
         else:
             y_unit = '-'
@@ -564,7 +566,7 @@ class PlotManager:
         else:
             title_suffix = column_suffix
 
-        if title_suffix == "center" or title_suffix == "fwhm":
+        if title_suffix in ("center", "fwhm", "sigma"):
             y_axis_title = f"{title_suffix} ({wavelength_unit})"
         else:
             y_axis_title = title_suffix + " (-)"
@@ -649,8 +651,14 @@ class PlotManager:
                                                        wavelength_unit=wavelength_unit, time_unit=time_unit,
                                                        name_map=name_map)
         figures.append(fig_heights)
-        
-        # Plot 5: R-squared vs time
+
+        # Plot 5: Peak sigma vs time
+        fig_sigma = self.create_single_plotly_figure(peak_ids, df, column_suffix='sigma',
+                                                     wavelength_unit=wavelength_unit, time_unit=time_unit,
+                                                     name_map=name_map)
+        figures.append(fig_sigma)
+
+        # Plot 6: R-squared vs time
         if 'r_squared' in df.columns:
             fig_quality = go.Figure()
             
@@ -775,6 +783,21 @@ class PlotManager:
         --------
         plotly.graph_objects.Figure
         """
+        if fit_result is None:
+            # Failed fit — return a raw-data-only figure with no fit overlay
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=wavelengths, y=raw_intensities,
+                mode='lines', name='Raw Data',
+                line=dict(color='black', width=2)
+            ))
+            fig.update_layout(
+                height=config.SPECTRUM_HEIGHT, width=config.SPECTRUM_WIDTH,
+                template='plotly_white',
+                title='Fit failed — raw data only'
+            )
+            return fig
+
         if name_map is None:
             peak_models = fit_result.get('peak_models', [])
             name_map = {f'p{i}': pm.get('name', f'p{i}') for i, pm in enumerate(peak_models)}
@@ -782,6 +805,7 @@ class PlotManager:
         fitted_curve = fit_result.get('fitted_curve')
         residuals = fit_result.get('residuals')
         components = fit_result.get('components', {})
+        fit_x = fit_result.get('fit_x', wavelengths)
         time_val = fit_result.get('time', 0)
         time_idx = fit_result.get('index', 0)
         r2 = fit_result.get('r_squared', float('nan'))
@@ -814,7 +838,7 @@ class PlotManager:
         # Total fitted curve
         if fitted_curve is not None:
             fig.add_trace(go.Scatter(
-                x=wavelengths,
+                x=fit_x,
                 y=fitted_curve,
                 mode='lines',
                 name='Total Fit',
@@ -828,7 +852,7 @@ class PlotManager:
             for comp_name, comp_values in components.items():
                 try:
                     comp_arr = np.asarray(comp_values, dtype=float)
-                    if comp_arr.ndim != 1 or len(comp_arr) != len(wavelengths):
+                    if comp_arr.ndim != 1 or len(comp_arr) != len(fit_x):
                         debug_print(f"Skipping component {comp_name}: shape mismatch", "PLOT")
                         continue
                     prefix = comp_name.rstrip('_')  # e.g. 'p0_' → 'p0', 'bg_' → 'bg'
@@ -839,7 +863,7 @@ class PlotManager:
                     else:
                         label = comp_name.replace('_', ' ').strip()
                     fig.add_trace(go.Scatter(
-                        x=wavelengths,
+                        x=fit_x,
                         y=comp_arr,
                         mode='lines',
                         name=label,
@@ -853,7 +877,7 @@ class PlotManager:
         # Residuals
         if residuals is not None:
             fig.add_trace(go.Scatter(
-                x=wavelengths,
+                x=fit_x,
                 y=residuals,
                 mode='lines',
                 name='Residuals',

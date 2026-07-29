@@ -496,7 +496,7 @@ class H5DataLoader:
         Parameters:
         -----------
         mode : str
-            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'transmission_raw', 'transmission_binned')
+            Data mode ('pl_raw', 'pl_binned', 'giwaxs', 'giwaxs_diamond', 'transmission_raw', 'transmission_binned', 'absorbance_raw', 'absorbance_binned')
         h5_path : str, optional
             Path to H5 file. If None, uses stored path
             
@@ -541,6 +541,18 @@ class H5DataLoader:
                     time_unit = time_unit.decode()
                 debug_print(f"GIWAXS time unit read from attribute: {time_unit}", "H5")
 
+            elif mode == "giwaxs_diamond":
+                ts_dataset = f[config.H5_PATHS['giwaxs_diamond']['timestamps']]
+                timestamps = ts_dataset[()]
+                data_matrix = f[config.H5_PATHS['giwaxs_diamond']['data']][()]
+                y_values = f[config.H5_PATHS['giwaxs_diamond']['wavelengths']][()][0]
+                unit = "1/Å"
+                # Read time unit from dataset attribute; fall back to 's'
+                time_unit = ts_dataset.attrs.get('units', ts_dataset.attrs.get('unit', 's'))
+                if isinstance(time_unit, bytes):
+                    time_unit = time_unit.decode()
+                debug_print(f"GIWAXS Diamond time unit read from attribute: {time_unit}", "H5")
+
             elif mode == "transmission_raw":
                 timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
                 data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
@@ -554,6 +566,26 @@ class H5DataLoader:
                 timestamps, y_values = get_axes_from_extent(extent, data_matrix)
                 unit = "nm"
                 time_unit = "s"
+
+            elif mode == "absorbance_raw":
+                timestamps = f[config.H5_PATHS['transmission_raw']['timestamps']][()]
+                data_matrix = f[config.H5_PATHS['transmission_raw']['data']][()]
+                y_values = f[config.H5_PATHS['transmission_raw']['wavelengths']][()]
+                unit = "nm"
+                time_unit = "s"
+                ref_mask = (timestamps >= 1) & (timestamps <= 6)
+                t_ref = data_matrix[ref_mask, :].mean(axis=0, keepdims=True)
+                data_matrix = -np.log(data_matrix / t_ref)
+
+            elif mode == "absorbance_binned":
+                extent = f[config.H5_PATHS['transmission_binned']['extent']][()]
+                data_matrix = f[config.H5_PATHS['transmission_binned']['data']][()].T
+                timestamps, y_values = get_axes_from_extent(extent, data_matrix)
+                unit = "nm"
+                time_unit = "s"
+                ref_mask = (timestamps >= 1) & (timestamps <= 6)
+                t_ref = data_matrix[ref_mask, :].mean(axis=0, keepdims=True)
+                data_matrix = -np.log(data_matrix / t_ref)
 
             else:
                 raise ValueError(f"Unknown H5 mode: {mode}")
